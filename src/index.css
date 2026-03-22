@@ -1,0 +1,490 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light beauty theme - clean white background */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+
+    /* Coral/red primary like the logo */
+    --primary: 350 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Soft lavender secondary */
+    --secondary: 280 30% 95%;
+    --secondary-foreground: 0 0% 0%;
+
+    /* Muted soft pink */
+    --muted: 330 25% 94%;
+    --muted-foreground: 0 0% 0%;
+
+    /* Peach accent */
+    --accent: 25 80% 70%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Soft borders */
+    --border: 330 20% 90%;
+    --input: 330 20% 90%;
+    --ring: 350 85% 55%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens - beauty gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(280 60% 85%) 0%, hsl(25 70% 85%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(350 85% 55%) 0%, hsl(25 80% 60%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(330 30% 98%) 100%);
+    --gradient-glass: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.7) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(280 60% 92%) 0%, hsl(330 50% 95%) 50%, hsl(25 70% 92%) 100%);
+    
+    --glow-primary: 0 0 40px hsla(350, 85%, 55%, 0.15);
+    --glow-accent: 0 0 40px hsla(25, 80%, 70%, 0.2);
+    
+    /* Sidebar - light gray with lavender tint */
+    --sidebar-background: 260 10% 96%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 350 85% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 260 8% 92%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 260 6% 90%;
+    --sidebar-ring: 350 85% 55%;
+    
+    /* Sidebar typography */
+    --sidebar-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+
+    /* Signal colors - softer beauty tones */
+    --signal-hot: 350 85% 55%;
+    --signal-warm: 25 80% 60%;
+    --signal-rising: 280 50% 60%;
+    --signal-stable: 170 50% 50%;
+
+    /* CTA colors */
+    --cta-primary: var(--primary);
+    --cta-hover: 350 85% 45%;
+    --cta-text: 0 0% 100%;
+    --cta-gradient-start: var(--primary);
+    --cta-gradient-end: var(--accent);
+    --cta-gradient-enabled: 0;
+    --cta-gradient-angle: 135deg;
+    --cta-gradient-hover-effect: none;
+
+    /* Link colors */
+    --link-default: var(--primary);
+    --link-hover: 350 85% 45%;
+    --link-visited: 280 50% 60%;
+
+    /* Menu colors (aliases to sidebar for consistency) */
+    --menu-background: var(--sidebar-background);
+    --menu-text: var(--sidebar-foreground);
+    --menu-hover: var(--sidebar-accent);
+    --menu-active: var(--sidebar-primary);
+
+    /* Typography */
+    --font-display: 'Syne', sans-serif;
+    --font-sans: 'Inter', sans-serif;
+    --base-font-size: 16px;
+    --heading-weight: 600;
+    --body-weight: 400;
+    --line-height: 1.6;
+
+    /* Spacing */
+    --spacing-unit: 4px;
+
+    /* Effects */
+    --gradients-enabled: 1;
+    --shadows-enabled: 1;
+    --shadow-intensity: 0.5;
+  }
+
+  .dark {
+    /* Dark mode with beauty undertones */
+    --background: 280 20% 8%;
+    --foreground: 330 20% 95%;
+    --card: 280 20% 10%;
+    --card-foreground: 330 20% 95%;
+    --popover: 280 20% 10%;
+    --popover-foreground: 330 20% 95%;
+    --primary: 350 85% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 280 20% 15%;
+    --secondary-foreground: 330 20% 90%;
+    --muted: 280 15% 15%;
+    --muted-foreground: 330 15% 60%;
+    --accent: 25 70% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 280 15% 18%;
+    --input: 280 15% 18%;
+    --ring: 350 85% 60%;
+    
+    --gradient-primary: linear-gradient(135deg, hsl(280 40% 25%) 0%, hsl(25 50% 25%) 100%);
+    --gradient-glass: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    --glow-primary: 0 0 40px hsla(350, 85%, 55%, 0.25);
+    
+    /* Sidebar - keep light gray with lavender tint even in dark mode */
+    --sidebar-background: 260 10% 96%;
+    --sidebar-foreground: 0 0% 5%;
+    --sidebar-primary: 350 85% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 260 8% 92%;
+    --sidebar-accent-foreground: 0 0% 5%;
+    --sidebar-border: 260 6% 90%;
+    --sidebar-ring: 350 85% 55%;
+    
+    --sidebar-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+
+    /* CTA colors - dark mode */
+    --cta-primary: 350 85% 60%;
+    --cta-hover: 350 85% 50%;
+    --cta-text: 0 0% 100%;
+
+    /* Link colors - dark mode */
+    --link-default: 350 85% 60%;
+    --link-hover: 350 85% 70%;
+    --link-visited: 280 50% 70%;
+
+    /* Menu colors - dark mode */
+    --menu-background: var(--sidebar-background);
+    --menu-text: var(--sidebar-foreground);
+    --menu-hover: var(--sidebar-accent);
+    --menu-active: var(--sidebar-primary);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 700;
+  }
+  
+  /* Smooth theme transitions for demo */
+  :root {
+    --theme-transition-duration: 0.8s;
+  }
+  
+  /* Global background transition */
+  body {
+    transition: background-color var(--theme-transition-duration) cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Elements that should transition smoothly with theme */
+  .theme-transition,
+  button,
+  a,
+  .glass-card,
+  header,
+  nav,
+  section,
+  div,
+  [class*="bg-"],
+  [class*="text-primary"],
+  [class*="border-"] {
+    transition: 
+      background-color var(--theme-transition-duration) cubic-bezier(0.4, 0, 0.2, 1),
+      border-color var(--theme-transition-duration) cubic-bezier(0.4, 0, 0.2, 1),
+      color var(--theme-transition-duration) cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow var(--theme-transition-duration) cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .demo-theme-active {
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+    --glow-primary: 0 0 40px hsl(var(--primary) / 0.3);
+  }
+  
+  /* Theme pulse effect */
+  @keyframes themePulse {
+    0% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.2);
+    }
+  }
+  
+  .theme-pulse-overlay {
+    animation: themePulse 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 shadow-sm;
+    background: var(--gradient-glass);
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-accent);
+  }
+
+  .gradient-text-accent {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-accent);
+  }
+  
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+
+  .signal-dot {
+    @apply w-2 h-2 rounded-full animate-pulse;
+  }
+
+  .signal-hot {
+    @apply bg-primary;
+  }
+
+  .signal-warm {
+    @apply bg-accent;
+  }
+
+  .signal-rising {
+    background-color: hsl(var(--signal-rising));
+  }
+
+  .signal-stable {
+    background-color: hsl(var(--signal-stable));
+  }
+
+  /* CTA Button with theme-aware styling */
+  .cta-button {
+    background-color: hsl(var(--cta-primary));
+    color: hsl(var(--cta-text));
+    transition: all 0.3s ease;
+  }
+
+  .cta-button:hover {
+    background-color: hsl(var(--cta-hover));
+  }
+
+  .cta-button-gradient {
+    background: linear-gradient(var(--cta-gradient-angle), var(--cta-gradient-start), var(--cta-gradient-end));
+    color: hsl(var(--cta-text));
+    transition: all 0.3s ease;
+  }
+
+  /* CTA Gradient hover effects */
+  .cta-hover-shift:hover {
+    background: linear-gradient(calc(var(--cta-gradient-angle) + 45deg), var(--cta-gradient-end), var(--cta-gradient-start));
+  }
+
+  .cta-hover-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-hover-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s ease;
+  }
+
+  .cta-hover-shimmer:hover::after {
+    left: 100%;
+  }
+
+  .cta-hover-pulse:hover {
+    animation: ctaPulse 0.6s ease-in-out;
+  }
+
+  @keyframes ctaPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  /* Theme-aware links */
+  .theme-link {
+    color: hsl(var(--link-default));
+    transition: color 0.2s ease;
+  }
+
+  .theme-link:hover {
+    color: hsl(var(--link-hover));
+  }
+
+  .theme-link:visited {
+    color: hsl(var(--link-visited));
+  }
+
+  /* Typography with theme variables */
+  .theme-heading {
+    font-family: var(--font-display);
+    font-weight: var(--heading-weight);
+  }
+
+  .theme-body {
+    font-family: var(--font-sans);
+    font-weight: var(--body-weight);
+    line-height: var(--line-height);
+  }
+
+  /* Shadow utilities with theme intensity */
+  .theme-shadow-sm {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, calc(0.05 * var(--shadow-intensity)));
+  }
+
+  .theme-shadow {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, calc(0.1 * var(--shadow-intensity))),
+                0 1px 2px -1px rgba(0, 0, 0, calc(0.1 * var(--shadow-intensity)));
+  }
+
+  .theme-shadow-md {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, calc(0.1 * var(--shadow-intensity))),
+                0 2px 4px -2px rgba(0, 0, 0, calc(0.1 * var(--shadow-intensity)));
+  }
+
+  .theme-shadow-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, calc(0.1 * var(--shadow-intensity))),
+                0 4px 6px -4px rgba(0, 0, 0, calc(0.1 * var(--shadow-intensity)));
+  }
+
+  /* Theme menu tabs - scoped styling for brand theme page */
+  .theme-menu-tabs [role="tablist"] {
+    background-color: var(--menu-bg);
+    border-radius: var(--menu-radius);
+  }
+
+  .theme-menu-tabs [role="tab"] {
+    color: var(--menu-text);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .theme-menu-tabs [role="tab"]:hover {
+    background-color: var(--menu-hover);
+  }
+
+  .theme-menu-tabs [role="tab"][data-state="active"] {
+    background-color: var(--menu-active);
+    color: white;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-slide-in-right {
+    animation: slideInRight 0.4s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+
+  .animate-glow-pulse {
+    animation: glowPulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from { 
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% { 
+    box-shadow: 0 0 20px hsla(350, 85%, 55%, 0.1);
+  }
+  50% { 
+    box-shadow: 0 0 40px hsla(350, 85%, 55%, 0.2);
+  }
+}
+
+/* Custom scrollbar - soft beauty style */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
