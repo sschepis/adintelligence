@@ -93,7 +93,7 @@ export function CampaignDeployWizard({
     id: p.id || `product-${i}`,
     name: p.name || `Product ${i + 1}`,
     image_url: p.image_url,
-    stock: p.stock ?? Math.floor(Math.random() * 200 + 50),
+    stock: p.stock ?? 0,
   }));
   
   const [config, setConfig] = useState<DeployConfig>({

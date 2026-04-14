@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PageContainer } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -98,35 +98,65 @@ const ProductDetail = () => {
     }
   }, [activeBrand, productId]);
 
-  // Mock performance data
-  const performanceData = [
-    { date: "Mon", views: 120, clicks: 45, conversions: 12 },
-    { date: "Tue", views: 180, clicks: 62, conversions: 18 },
-    { date: "Wed", views: 150, clicks: 55, conversions: 15 },
-    { date: "Thu", views: 220, clicks: 78, conversions: 24 },
-    { date: "Fri", views: 280, clicks: 95, conversions: 32 },
-    { date: "Sat", views: 320, clicks: 112, conversions: 38 },
-    { date: "Sun", views: 260, clicks: 88, conversions: 28 },
-  ];
-
-  const channelDistribution = [
-    { name: "Organic", value: 35, color: "hsl(var(--primary))" },
-    { name: "Social", value: 28, color: "hsl(350, 85%, 55%)" },
-    { name: "Paid Ads", value: 22, color: "hsl(25, 80%, 60%)" },
-    { name: "Email", value: 15, color: "hsl(280, 60%, 55%)" },
-  ];
-
   // Find related campaigns
-  const relatedCampaigns = campaigns.filter(c => 
-    c.name.toLowerCase().includes(product?.category?.toLowerCase() || '') ||
-    c.name.toLowerCase().includes(product?.name.split(' ')[0]?.toLowerCase() || '')
-  ).slice(0, 3);
+  const relatedCampaigns = useMemo(() =>
+    campaigns.filter(c =>
+      c.name.toLowerCase().includes(product?.category?.toLowerCase() || '') ||
+      c.name.toLowerCase().includes(product?.name.split(' ')[0]?.toLowerCase() || '')
+    ).slice(0, 3),
+    [campaigns, product]
+  );
 
   // Find matching trends
-  const matchingTrends = savedTrends.filter(t =>
-    product?.tags?.some(tag => t.trend_name.toLowerCase().includes(tag.toLowerCase())) ||
-    t.trend_name.toLowerCase().includes(product?.category?.toLowerCase() || '')
-  ).slice(0, 4);
+  const matchingTrends = useMemo(() =>
+    savedTrends.filter(t =>
+      product?.tags?.some(tag => t.trend_name.toLowerCase().includes(tag.toLowerCase())) ||
+      t.trend_name.toLowerCase().includes(product?.category?.toLowerCase() || '')
+    ).slice(0, 4),
+    [savedTrends, product]
+  );
+
+  // Aggregate performance data from related campaigns
+  const performanceData = useMemo(() => {
+    if (relatedCampaigns.length === 0) return [];
+    const totalImpressions = relatedCampaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+    const totalClicks = relatedCampaigns.reduce((s, c) => s + (c.clicks || 0), 0);
+    const totalConversions = relatedCampaigns.reduce((s, c) => s + (c.conversions || 0), 0);
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return days.map((day) => ({
+      date: day,
+      views: Math.round(totalImpressions / 7),
+      clicks: Math.round(totalClicks / 7),
+      conversions: Math.round(totalConversions / 7),
+    }));
+  }, [relatedCampaigns]);
+
+  // Build channel distribution from related campaigns
+  const channelDistribution = useMemo(() => {
+    if (relatedCampaigns.length === 0) return [];
+    const platformSpend: Record<string, number> = {};
+    let totalSpend = 0;
+    relatedCampaigns.forEach((c) => {
+      const platform = (c.platform || "Other").toLowerCase();
+      const spend = c.spent || 0;
+      platformSpend[platform] = (platformSpend[platform] || 0) + spend;
+      totalSpend += spend;
+    });
+    if (totalSpend === 0) return [];
+    const colors: Record<string, string> = {
+      organic: "hsl(var(--primary))",
+      social: "hsl(350, 85%, 55%)",
+      meta: "hsl(220, 80%, 55%)",
+      google: "hsl(25, 80%, 60%)",
+      tiktok: "hsl(160, 84%, 45%)",
+      email: "hsl(280, 60%, 55%)",
+    };
+    return Object.entries(platformSpend).map(([name, spend]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value: Math.round((spend / totalSpend) * 100),
+      color: colors[name] || "hsl(var(--muted-foreground))",
+    }));
+  }, [relatedCampaigns]);
 
   const handleCopySku = () => {
     if (product?.sku) {
@@ -386,31 +416,35 @@ const ProductDetail = () => {
 
         {/* Performance Tab */}
         <TabsContent value="overview" className="space-y-6">
+          {relatedCampaigns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-4" />
+              <p className="text-muted-foreground font-medium mb-2">No performance data yet</p>
+              <p className="text-sm text-muted-foreground/70">Create campaigns for this product to see performance metrics</p>
+            </div>
+          ) : (<>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-1">Weekly Views</p>
-                <p className="font-bold text-2xl">1,530</p>
-                <p className="text-xs text-signal-rising">+12.4%</p>
+                <p className="text-xs text-muted-foreground mb-1">Weekly Impressions</p>
+                <p className="font-bold text-2xl">{relatedCampaigns.reduce((s, c) => s + (c.impressions || 0), 0).toLocaleString()}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground mb-1">Conversion Rate</p>
-                <p className="font-bold text-2xl">3.2%</p>
-                <p className="text-xs text-signal-rising">+0.8%</p>
+                <p className="font-bold text-2xl">{(() => { const clicks = relatedCampaigns.reduce((s, c) => s + (c.clicks || 0), 0); const conv = relatedCampaigns.reduce((s, c) => s + (c.conversions || 0), 0); return clicks > 0 ? `${((conv / clicks) * 100).toFixed(1)}%` : "N/A"; })()}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-1">Revenue (7d)</p>
-                <p className="font-bold text-2xl">$4,280</p>
-                <p className="text-xs text-signal-rising">+18.2%</p>
+                <p className="text-xs text-muted-foreground mb-1">Total Spend</p>
+                <p className="font-bold text-2xl">${relatedCampaigns.reduce((s, c) => s + (c.spent || 0), 0).toLocaleString()}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-1">Avg. Order Value</p>
+                <p className="text-xs text-muted-foreground mb-1">Unit Price</p>
                 <p className="font-bold text-2xl">${(product.price || 0).toFixed(0)}</p>
                 <p className="text-xs text-muted-foreground">Per unit</p>
               </CardContent>
@@ -490,6 +524,7 @@ const ProductDetail = () => {
               </CardContent>
             </Card>
           </div>
+          </>)}
         </TabsContent>
 
         {/* Trends Tab */}
@@ -505,8 +540,8 @@ const ProductDetail = () => {
                   <h4 className="font-semibold mb-1">{trend.trend_name}</h4>
                   <p className="text-sm text-muted-foreground">{trend.velocity || "Rising"}</p>
                   <div className="flex items-center gap-2 mt-3">
-                    <Progress value={Math.random() * 40 + 60} className="h-1.5 flex-1" />
-                    <span className="text-xs font-medium">{Math.floor(Math.random() * 20 + 75)}%</span>
+                    <Progress value={trend.sentiment_score ?? 0} className="h-1.5 flex-1" />
+                    <span className="text-xs font-medium">{trend.sentiment_score ?? 0}%</span>
                   </div>
                 </CardContent>
               </Card>
@@ -563,37 +598,23 @@ const ProductDetail = () => {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-primary" />
-                  AI Recommendations
+                  Trend Matches
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-start gap-3 p-3 bg-background/50 rounded-lg">
-                  <div className="w-8 h-8 rounded-full bg-signal-rising/20 flex items-center justify-center shrink-0">
-                    <TrendingUp className="h-4 w-4 text-signal-rising" />
+                {matchingTrends.length > 0 ? matchingTrends.slice(0, 3).map((trend, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 bg-background/50 rounded-lg">
+                    <div className="w-8 h-8 rounded-full bg-signal-rising/20 flex items-center justify-center shrink-0">
+                      <TrendingUp className="h-4 w-4 text-signal-rising" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{trend.trend_name}</p>
+                      <p className="text-xs text-muted-foreground">{trend.platform} &middot; {trend.velocity || "Rising"}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">High Growth Potential</p>
-                    <p className="text-xs text-muted-foreground">This product aligns with 3 trending aesthetics</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 bg-background/50 rounded-lg">
-                  <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
-                    <Palette className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Visual Match</p>
-                    <p className="text-xs text-muted-foreground">Product colors match trending palette (Gold, Bronze)</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 bg-background/50 rounded-lg">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Target Audience</p>
-                    <p className="text-xs text-muted-foreground">Best performing with 18-34 female demographic</p>
-                  </div>
-                </div>
+                )) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No matching trends found for this product</p>
+                )}
               </CardContent>
             </Card>
 
@@ -601,33 +622,37 @@ const ProductDetail = () => {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <LineChart className="h-5 w-5" />
-                  Predicted Performance
+                  Campaign Performance
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {relatedCampaigns.length > 0 ? (
                 <div className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm">Predicted ROAS</span>
-                      <span className="font-bold text-signal-rising">3.8x</span>
+                      <span className="text-sm">ROAS</span>
+                      <span className="font-bold text-signal-rising">{(() => { const spend = relatedCampaigns.reduce((s, c) => s + (c.spent || 0), 0); const conv = relatedCampaigns.reduce((s, c) => s + (c.conversions || 0), 0); const rev = conv * (product.price || 0); return spend > 0 ? `${(rev / spend).toFixed(1)}x` : "N/A"; })()}</span>
                     </div>
-                    <Progress value={76} className="h-2" />
+                    <Progress value={Math.min(100, relatedCampaigns.reduce((s, c) => s + (c.conversions || 0), 0))} className="h-2" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm">Brand Alignment</span>
-                      <span className="font-bold">92%</span>
+                      <span className="text-sm">Trend Matches</span>
+                      <span className="font-bold">{matchingTrends.length}</span>
                     </div>
-                    <Progress value={92} className="h-2" />
+                    <Progress value={matchingTrends.length * 25} className="h-2" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm">Trend Momentum</span>
-                      <span className="font-bold">High</span>
+                      <span className="text-sm">Active Campaigns</span>
+                      <span className="font-bold">{relatedCampaigns.filter(c => c.status === "active").length}</span>
                     </div>
-                    <Progress value={85} className="h-2" />
+                    <Progress value={relatedCampaigns.filter(c => c.status === "active").length * 33} className="h-2" />
                   </div>
                 </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No campaign data available</p>
+                )}
               </CardContent>
             </Card>
           </div>

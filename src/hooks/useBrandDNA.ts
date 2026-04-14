@@ -146,10 +146,6 @@ export function useBrandDNA() {
     fetchBrandDNA();
   }, [fetchBrandDNA]);
 
-  useEffect(() => {
-    fetchBrandDNA();
-  }, [fetchBrandDNA]);
-
   const updateVoice = async (voice: Partial<BrandVoice>) => {
     if (!activeBrand) return;
     setSaving(true);

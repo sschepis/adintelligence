@@ -54,13 +54,13 @@ export function useInventorySync() {
     }
 
     const items: InventoryItem[] = activeBrand.products.map((product: any, index: number) => {
-      const stock = product.stock ?? Math.floor(Math.random() * 500);
+      const stock = product.stock ?? 0;
       const reserved = Math.floor(stock * 0.1);
-      
+
       return {
         id: product.id || `product-${index}`,
         name: product.name || `Product ${index + 1}`,
-        sku: product.sku || `SKU-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        sku: product.sku || "Unassigned",
         stock,
         reserved,
         available: stock - reserved,

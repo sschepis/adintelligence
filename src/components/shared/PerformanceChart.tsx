@@ -4,6 +4,7 @@ import { useCampaigns } from "@/hooks/useCampaigns";
 import { useMemo } from "react";
 import { SkeletonChart } from "@/components/ui/skeleton";
 import { TrendingUp } from "lucide-react";
+import { DEFAULT_AVG_ORDER_VALUE } from "@/lib/dataIndicators";
 
 interface PerformanceChartProps {
   className?: string;
@@ -25,20 +26,16 @@ export function PerformanceChart({ className }: PerformanceChartProps) {
     const totalClicks = campaigns.reduce((sum, c) => sum + (c.clicks || 0), 0);
     const totalConversions = campaigns.reduce((sum, c) => sum + (c.conversions || 0), 0);
 
-    // Estimate revenue from conversions (assume $50 avg order value)
-    const estimatedRevenue = totalConversions * 50;
+    const estimatedRevenue = totalConversions * DEFAULT_AVG_ORDER_VALUE;
     const roas = totalSpent > 0 ? estimatedRevenue / totalSpent : 0;
 
-    // Distribute across days based on campaign activity
-    const data = days.map((day, index) => {
-      const dayFactor = 0.1 + (index * 0.03) + (Math.random() * 0.1); // Progressive increase with variation
-      return {
-        date: day,
-        spend: Math.round(totalSpent * dayFactor / 7),
-        revenue: Math.round(estimatedRevenue * dayFactor / 7),
-        roas: roas.toFixed(1),
-      };
-    });
+    // Distribute evenly across days
+    const data = days.map((day) => ({
+      date: day,
+      spend: Math.round(totalSpent / 7),
+      revenue: Math.round(estimatedRevenue / 7),
+      roas: roas.toFixed(1),
+    }));
 
     return {
       chartData: data,

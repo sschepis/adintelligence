@@ -613,16 +613,16 @@ export function ThemePreviewMode({ theme }: ThemePreviewModeProps) {
                   <div className="pt-4 border-t">
                     <p className="text-xs text-muted-foreground mb-1">Body - Paragraph</p>
                     <p style={bodyStyle}>
-                      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor 
-                      incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
-                      exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                      Sample body text for theme preview. This paragraph demonstrates how your brand's
+                      typography and color choices appear in longer-form content. The styling shown here
+                      reflects your current theme configuration.
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Body - Small</p>
                     <p className="text-sm" style={bodyStyle}>
-                      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
-                      fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.
+                      Smaller body text is used for captions, footnotes, and secondary information.
+                      This style complements the primary paragraph text above.
                     </p>
                   </div>
                 </div>

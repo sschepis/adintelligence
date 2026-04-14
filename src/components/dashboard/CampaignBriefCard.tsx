@@ -61,13 +61,13 @@ export function matchProductsToTrend(
         keyword => productName.includes(keyword) || category.includes(keyword)
       ).length;
       
-      const stock = product.stock ?? Math.floor(Math.random() * 300);
-      const stockStatus: "high" | "medium" | "low" = 
-        stock > 100 ? "high" : stock > 30 ? "medium" : "low";
-      
+      const stock = product.stock ?? 0;
+      const stockStatus: "high" | "medium" | "low" =
+        product.stock === undefined ? "low" : stock > 100 ? "high" : stock > 30 ? "medium" : "low";
+
       return {
         name: product.name,
-        sku: product.sku || `SKU-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        sku: product.sku || "No SKU",
         stock,
         stockStatus,
         image_url: product.image_url,

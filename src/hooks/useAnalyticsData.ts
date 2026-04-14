@@ -3,6 +3,7 @@ import { useCampaigns } from "./useCampaigns";
 import { useUsageAnalytics } from "./useUsageAnalytics";
 import { useBrand } from "@/contexts/BrandContext";
 import { subDays, format, isWithinInterval, subWeeks, subMonths } from "date-fns";
+import { DEFAULT_AVG_ORDER_VALUE } from "@/lib/dataIndicators";
 
 interface PerformanceDataPoint {
   date: string;
@@ -75,14 +76,11 @@ export function useAnalyticsData(timeRange: string) {
   // Brand filter state - null means "All Brands"
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   
-  // Filter campaigns by selected brand (if brand filtering is implemented on campaigns)
-  // For now, we use all campaigns but provide the filter UI infrastructure
+  // Filter campaigns by selected brand
   const filteredCampaigns = useMemo(() => {
     if (!campaigns) return [];
-    // In a future iteration, campaigns would have a brand_id field
-    // For now, return all campaigns when "All Brands" selected, 
-    // or filter by active brand if specific brand selected
-    return campaigns;
+    if (!selectedBrandId) return campaigns;
+    return campaigns.filter(c => c.brand_id === selectedBrandId);
   }, [campaigns, selectedBrandId]);
   
   const handleBrandFilterChange = useCallback((brandId: string | null) => {
@@ -167,7 +165,7 @@ export function useAnalyticsData(timeRange: string) {
     const totalClicks = campaignList.reduce((sum, c) => sum + (c.clicks || 0), 0);
     const totalConversions = campaignList.reduce((sum, c) => sum + (c.conversions || 0), 0);
     
-    const avgOrderValue = 50;
+    const avgOrderValue = DEFAULT_AVG_ORDER_VALUE;
     const totalRevenue = totalConversions * avgOrderValue;
     const avgRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
     const clickRate = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
@@ -185,23 +183,11 @@ export function useAnalyticsData(timeRange: string) {
     };
   };
 
-  // Calculate metrics with trend comparison
+  // Calculate metrics with trend comparison using actual previous-period data
   const metrics = useMemo<AnalyticsMetrics>(() => {
-    // For trend comparison, we use filtered campaigns
     const currentMetrics = calculateMetricsFromCampaigns(campaignsForMetrics);
-    
-    // Simulate previous period with slight variation (in production, you'd query historical data)
-    const variationFactor = 0.85 + Math.random() * 0.1; // 85-95% of current
-    const previousMetrics = {
-      totalSpend: currentMetrics.totalSpend * variationFactor,
-      totalImpressions: currentMetrics.totalImpressions * variationFactor,
-      totalClicks: currentMetrics.totalClicks * variationFactor,
-      totalConversions: currentMetrics.totalConversions * variationFactor,
-      totalRevenue: currentMetrics.totalRevenue * variationFactor,
-      avgRoas: currentMetrics.avgRoas * (0.9 + Math.random() * 0.15),
-      clickRate: currentMetrics.clickRate * (0.95 + Math.random() * 0.1),
-      conversionRate: currentMetrics.conversionRate * (0.9 + Math.random() * 0.15),
-    };
+    const previousCampaigns = filterCampaignsByRange(previousRange);
+    const previousMetrics = calculateMetricsFromCampaigns(previousCampaigns);
 
     return {
       totalRevenue: calculateTrend(currentMetrics.totalRevenue, previousMetrics.totalRevenue),
@@ -213,7 +199,7 @@ export function useAnalyticsData(timeRange: string) {
       clickRate: calculateTrend(currentMetrics.clickRate, previousMetrics.clickRate),
       conversionRate: calculateTrend(currentMetrics.conversionRate, previousMetrics.conversionRate),
     };
-  }, [campaignsForMetrics]);
+  }, [campaignsForMetrics, previousRange]);
 
   // Generate performance data over time from campaigns with comparison data
   const { performanceData, comparisonData } = useMemo<{ 
@@ -231,28 +217,39 @@ export function useAnalyticsData(timeRange: string) {
     const totalConversions = campaignsForMetrics.reduce((sum, c) => sum + (c.conversions || 0), 0);
     const totalSpend = campaignsForMetrics.reduce((sum, c) => sum + (c.spent || 0), 0);
 
+    // Count campaigns per day for weighted distribution
+    const dayCounts: Record<string, number> = {};
+    campaignsForMetrics.forEach((c) => {
+      const d = format(new Date(c.created_at), days <= 7 ? "EEE" : "MMM d");
+      dayCounts[d] = (dayCounts[d] || 0) + 1;
+    });
+
+    const previousCampaigns = filterCampaignsByRange(previousRange);
+    const prevTotalImpressions = previousCampaigns.reduce((sum, c) => sum + (c.impressions || 0), 0);
+    const prevTotalClicks = previousCampaigns.reduce((sum, c) => sum + (c.clicks || 0), 0);
+    const prevTotalConversions = previousCampaigns.reduce((sum, c) => sum + (c.conversions || 0), 0);
+    const prevTotalSpend = previousCampaigns.reduce((sum, c) => sum + (c.spent || 0), 0);
+
     for (let i = days - 1; i >= 0; i--) {
       const date = subDays(new Date(), i);
       const dateStr = format(date, days <= 7 ? "EEE" : "MMM d");
-      
+
       const dayFactor = 1 / days;
-      const currentVariation = 0.8 + Math.random() * 0.4;
-      const previousVariation = 0.7 + Math.random() * 0.3; // Lower baseline for previous period
-      
+
       currentDataPoints.push({
         date: dateStr,
-        impressions: Math.round(totalImpressions * dayFactor * currentVariation),
-        clicks: Math.round(totalClicks * dayFactor * currentVariation),
-        conversions: Math.round(totalConversions * dayFactor * currentVariation),
-        spend: Math.round(totalSpend * dayFactor * currentVariation),
+        impressions: Math.round(totalImpressions * dayFactor),
+        clicks: Math.round(totalClicks * dayFactor),
+        conversions: Math.round(totalConversions * dayFactor),
+        spend: Math.round(totalSpend * dayFactor),
       });
 
       previousDataPoints.push({
         date: dateStr,
-        impressions: Math.round(totalImpressions * dayFactor * previousVariation),
-        clicks: Math.round(totalClicks * dayFactor * previousVariation),
-        conversions: Math.round(totalConversions * dayFactor * previousVariation),
-        spend: Math.round(totalSpend * dayFactor * previousVariation),
+        impressions: Math.round(prevTotalImpressions * dayFactor),
+        clicks: Math.round(prevTotalClicks * dayFactor),
+        conversions: Math.round(prevTotalConversions * dayFactor),
+        spend: Math.round(prevTotalSpend * dayFactor),
       });
     }
 
@@ -291,7 +288,7 @@ export function useAnalyticsData(timeRange: string) {
     return campaignsForMetrics.map((campaign) => {
       const spend = campaign.spent || 0;
       const conversions = campaign.conversions || 0;
-      const avgOrderValue = 50;
+      const avgOrderValue = DEFAULT_AVG_ORDER_VALUE;
       const revenue = conversions * avgOrderValue;
       const roas = spend > 0 ? revenue / spend : 0;
 

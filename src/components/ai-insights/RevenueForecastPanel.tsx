@@ -21,17 +21,29 @@ export function RevenueForecastPanel({ savedTrends, inventory, forecast, isLoadi
   const [expandedTrend, setExpandedTrend] = useState<string | null>(null);
 
   const handleForecast = () => {
-    // Create mock trend matches from saved trends and inventory
-    const matches = savedTrends.slice(0, 5).map((trend, i) => ({
-      trendName: trend.trend_name,
-      matchScore: 85 - (i * 10),
-      products: inventory.slice(0, 3).map(p => ({
-        name: p.name,
-        price: p.price || 29.99,
-        stock: p.stock,
-      })),
-    }));
-    
+    // Build trend-product matches from actual inventory data
+    const matches = savedTrends.slice(0, 5).map((trend) => {
+      // Find products whose category or name relate to this trend
+      const matchingProducts = inventory
+        .filter(p =>
+          p.category?.toLowerCase().includes(trend.trend_name.toLowerCase().split(' ')[0]) ||
+          p.name.toLowerCase().includes(trend.trend_name.toLowerCase().split(' ')[0])
+        )
+        .slice(0, 3);
+
+      const productsToUse = matchingProducts.length > 0 ? matchingProducts : inventory.slice(0, 3);
+
+      return {
+        trendName: trend.trend_name,
+        matchScore: matchingProducts.length > 0 ? 75 : 50,
+        products: productsToUse.map(p => ({
+          name: p.name,
+          price: p.price,
+          stock: p.stock,
+        })),
+      };
+    });
+
     onForecast(matches, parseInt(timeframe));
   };
 

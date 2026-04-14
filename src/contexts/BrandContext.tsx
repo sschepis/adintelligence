@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import type { BrandVoice, BrandPersonality, BrandStory, BrandGuardrails, BrandDNAScore, Product, BrandMetadata } from "@/types/brand";
 
 export interface Brand {
   id: string;
@@ -14,14 +15,14 @@ export interface Brand {
   accent_color: string;
   background_color: string;
   text_color: string;
-  brand_voice: any;
-  brand_personality: any;
-  brand_story: any;
-  brand_guardrails: any;
-  brand_dna_score: any;
-  products: any[];
+  brand_voice: BrandVoice | null;
+  brand_personality: BrandPersonality | null;
+  brand_story: BrandStory | null;
+  brand_guardrails: BrandGuardrails | null;
+  brand_dna_score: BrandDNAScore | null;
+  products: Product[];
   taxonomy: string[];
-  metadata: any;
+  metadata: BrandMetadata | null;
   sidebar_visibility: Record<string, boolean> | null;
   is_active: boolean;
   created_at: string;

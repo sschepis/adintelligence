@@ -388,7 +388,7 @@ const ActiveDeployment = () => {
         onOpenChange={setDeployWizardOpen}
         campaignName={deployingCampaign?.name}
         onDeploy={(config) => {
-          console.log("Deployed:", config);
+          // console.log("Deployed:", config);
           setDeployWizardOpen(false);
           setDeployingCampaign(null);
         }}

@@ -103,14 +103,14 @@ const playNotificationSound = () => {
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.3);
   } catch (e) {
-    console.log("Could not play notification sound:", e);
+    // console.log("Could not play notification sound:", e);
   }
 };
 
 // Request push notification permission
 const requestPushPermission = async (): Promise<boolean> => {
   if (!("Notification" in window)) {
-    console.log("This browser does not support notifications");
+    // console.log("This browser does not support notifications");
     return false;
   }
   
@@ -207,181 +207,59 @@ export function useNotifications() {
 
   // Listen for real-time campaign changes
   useEffect(() => {
-    const setupRealtimeSubscription = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+    let channels: ReturnType<typeof supabase.channel>[] = [];
 
-      const channel = supabase
+    const setup = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Campaign updates
+      const campaignChannel = supabase
         .channel('campaign-notifications')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'campaigns',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const campaign = payload.new as any;
-            const oldCampaign = payload.old as any;
-            
-            // Check if campaign needs attention (low performance or over budget)
-            if (campaign.performance_score && campaign.performance_score < 30) {
-              addNotification({
-                type: "alert",
-                title: "Campaign Needs Attention",
-                message: `"${campaign.name}" has a low performance score of ${campaign.performance_score}. Consider optimizing.`,
-                actionUrl: "/deployment",
-                priority: "high"
-              });
-            }
-            
-            if (campaign.spent > campaign.daily_budget * 0.9) {
-              addNotification({
-                type: "campaign",
-                title: "Budget Alert",
-                message: `"${campaign.name}" is approaching its daily budget limit.`,
-                actionUrl: "/deployment",
-                priority: "high"
-              });
-            }
-
-            // Notify on status changes
-            if (oldCampaign?.status !== campaign.status) {
-              addNotification({
-                type: "campaign",
-                title: "Campaign Status Changed",
-                message: `"${campaign.name}" is now ${campaign.status}.`,
-                actionUrl: "/deployment",
-                priority: "low"
-              });
-            }
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaigns', filter: `user_id=eq.${user.id}` }, (payload) => {
+          const campaign = payload.new as any;
+          const oldCampaign = payload.old as any;
+          if (campaign.performance_score && campaign.performance_score < 30) {
+            addNotification({ type: "alert", title: "Campaign Needs Attention", message: `"${campaign.name}" has a low performance score of ${campaign.performance_score}. Consider optimizing.`, actionUrl: "/deployment", priority: "high" });
           }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'campaigns',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const campaign = payload.new as any;
-            addNotification({
-              type: "success",
-              title: "Campaign Created",
-              message: `"${campaign.name}" has been created successfully.`,
-              actionUrl: "/deployment",
-              priority: "low"
-            });
+          if (campaign.spent > campaign.daily_budget * 0.9) {
+            addNotification({ type: "campaign", title: "Budget Alert", message: `"${campaign.name}" is approaching its daily budget limit.`, actionUrl: "/deployment", priority: "high" });
           }
-        )
-        .subscribe((status) => {
-          console.log("Campaign notification subscription status:", status);
-        });
+          if (oldCampaign?.status !== campaign.status) {
+            addNotification({ type: "campaign", title: "Campaign Status Changed", message: `"${campaign.name}" is now ${campaign.status}.`, actionUrl: "/deployment", priority: "low" });
+          }
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaigns', filter: `user_id=eq.${user.id}` }, (payload) => {
+          const campaign = payload.new as any;
+          addNotification({ type: "success", title: "Campaign Created", message: `"${campaign.name}" has been created successfully.`, actionUrl: "/deployment", priority: "low" });
+        })
+        .subscribe();
 
-      return channel;
-    };
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    setupRealtimeSubscription().then(ch => { channel = ch; });
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [addNotification]);
-
-  // Listen for new saved trends
-  useEffect(() => {
-    const setupTrendSubscription = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      const channel = supabase
+      // Saved trends
+      const trendChannel = supabase
         .channel('trend-notifications')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'saved_trends',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const trend = payload.new as any;
-            addNotification({
-              type: "trend",
-              title: "New Trend Saved",
-              message: `"${trend.trend_name}" has been added to your saved trends.`,
-              actionUrl: "/signals",
-              priority: "low"
-            });
-          }
-        )
-        .subscribe((status) => {
-          console.log("Trend notification subscription status:", status);
-        });
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'saved_trends', filter: `user_id=eq.${user.id}` }, (payload) => {
+          const trend = payload.new as any;
+          addNotification({ type: "trend", title: "New Trend Saved", message: `"${trend.trend_name}" has been added to your saved trends.`, actionUrl: "/signals", priority: "low" });
+        })
+        .subscribe();
 
-      return channel;
-    };
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    setupTrendSubscription().then(ch => { channel = ch; });
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [addNotification]);
-
-  // Listen for A/B test results updates
-  useEffect(() => {
-    const setupABTestSubscription = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      const channel = supabase
+      // A/B test results
+      const abTestChannel = supabase
         .channel('abtest-notifications')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'ab_test_results',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const test = payload.new as any;
-            if (test.status === 'concluded' && test.winner) {
-              addNotification({
-                type: "ai",
-                title: "A/B Test Concluded",
-                message: `Test for "${test.suggestion_text}" completed. Winner: ${test.winner}.`,
-                actionUrl: "/deployment",
-                priority: "medium"
-              });
-            }
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ab_test_results', filter: `user_id=eq.${user.id}` }, (payload) => {
+          const test = payload.new as any;
+          if (test.status === 'concluded' && test.winner) {
+            addNotification({ type: "ai", title: "A/B Test Concluded", message: `Test for "${test.suggestion_text}" completed. Winner: ${test.winner}.`, actionUrl: "/deployment", priority: "medium" });
           }
-        )
-        .subscribe((status) => {
-          console.log("A/B test notification subscription status:", status);
-        });
+        })
+        .subscribe();
 
-      return channel;
+      channels = [campaignChannel, trendChannel, abTestChannel];
     };
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    setupABTestSubscription().then(ch => { channel = ch; });
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
+    setup();
+    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
   }, [addNotification]);
 
   // Periodic check for trend opportunities
@@ -399,7 +277,7 @@ export function useNotifications() {
 
         if (campaigns && campaigns.length > 0) {
           const underperforming = campaigns.filter(c => (c.performance_score || 0) < 40);
-          if (underperforming.length > 0 && Math.random() > 0.7) {
+          if (underperforming.length > 0) {
             addNotification({
               type: "ai",
               title: "AI Recommendation",

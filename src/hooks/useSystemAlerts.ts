@@ -122,7 +122,7 @@ export async function createSystemAlert(
             details,
           },
         });
-        console.log("[SystemAlerts] Email notification sent for", severity, "alert");
+        // console.log("[SystemAlerts] Email notification sent for", severity, "alert");
       } catch (emailErr) {
         console.error("[SystemAlerts] Failed to send email notification:", emailErr);
       }

@@ -34,26 +34,26 @@ export default function BrandCatalog() {
     return (activeBrand?.products || []) as ProductData[];
   }, [activeBrand]);
 
-  // Calculate filter counts
+  // Calculate filter counts from actual product properties
   const filterTabs: FilterTabConfig[] = useMemo(() => {
-    const trendingCount = products.filter(p => (p as any).trending || Math.random() > 0.6).length;
+    const trendingCount = products.filter(p => (p as any).trending === true).length;
     const newCount = products.filter(p => {
       const createdAt = (p as any).created_at;
-      if (!createdAt) return Math.random() > 0.7;
+      if (!createdAt) return false;
       const date = new Date(createdAt);
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       return date > thirtyDaysAgo;
     }).length;
-    const onlineCount = products.filter(p => (p as any).channel === "online" || Math.random() > 0.5).length;
-    const retailCount = products.filter(p => (p as any).channel === "retail" || Math.random() > 0.7).length;
+    const onlineCount = products.filter(p => (p as any).channel === "online").length;
+    const retailCount = products.filter(p => (p as any).channel === "retail").length;
 
     return [
-      { id: "all", label: "All", icon: Package, count: products.length },
-      { id: "trending", label: "Trending", icon: TrendingUp, count: trendingCount || Math.floor(products.length * 0.4) },
-      { id: "new", label: "New", icon: Sparkles, count: newCount || Math.floor(products.length * 0.25) },
-      { id: "online", label: "Online", icon: Globe, count: onlineCount || Math.floor(products.length * 0.5) },
-      { id: "retail", label: "Retail", icon: Store, count: retailCount || Math.floor(products.length * 0.25) },
+      { id: "all" as FilterTab, label: "All", icon: Package, count: products.length },
+      ...(trendingCount > 0 ? [{ id: "trending" as FilterTab, label: "Trending", icon: TrendingUp, count: trendingCount }] : []),
+      ...(newCount > 0 ? [{ id: "new" as FilterTab, label: "New", icon: Sparkles, count: newCount }] : []),
+      ...(onlineCount > 0 ? [{ id: "online" as FilterTab, label: "Online", icon: Globe, count: onlineCount }] : []),
+      ...(retailCount > 0 ? [{ id: "retail" as FilterTab, label: "Retail", icon: Store, count: retailCount }] : []),
     ];
   }, [products]);
 
@@ -61,15 +61,20 @@ export default function BrandCatalog() {
   const filteredProducts = useMemo(() => {
     let filtered = products;
 
-    // Apply tab filter
+    // Apply tab filter using actual product properties
     if (activeTab === "trending") {
-      filtered = filtered.filter((_, i) => i % 2 === 0); // Mock filter
+      filtered = filtered.filter(p => (p as any).trending === true);
     } else if (activeTab === "new") {
-      filtered = filtered.filter((_, i) => i % 4 === 0);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      filtered = filtered.filter(p => {
+        const createdAt = (p as any).created_at;
+        return createdAt && new Date(createdAt) > thirtyDaysAgo;
+      });
     } else if (activeTab === "online") {
-      filtered = filtered.filter((_, i) => i % 2 === 1);
+      filtered = filtered.filter(p => (p as any).channel === "online");
     } else if (activeTab === "retail") {
-      filtered = filtered.filter((_, i) => i % 3 === 0);
+      filtered = filtered.filter(p => (p as any).channel === "retail");
     }
 
     // Apply search
@@ -153,7 +158,7 @@ export default function BrandCatalog() {
             <ProductCard 
               key={(product as any).id || index} 
               product={product} 
-              isTrending={index % 3 === 0}
+              isTrending={(product as any).trending === true}
               onClick={() => handleProductClick(product, index)}
             />
           ))}
@@ -243,7 +248,13 @@ function ProductCardSkeleton() {
 }
 
 function generateSKU(name: string): string {
+  // Derive a deterministic SKU from the product name
   const prefix = name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
-  const num = String(Math.floor(Math.random() * 999)).padStart(3, '0');
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0;
+  }
+  const num = String(Math.abs(hash) % 999).padStart(3, '0');
   return `${prefix}-${num}`;
 }

@@ -110,7 +110,7 @@ export function AdPreview({ onRunSimulation, isRunning, selectedPersonaCount = 4
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {/* Mock Video Player */}
+            {/* Ad Preview Placeholder */}
             <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center relative overflow-hidden">
               {/* Background Pattern */}
               <div className="absolute inset-0 opacity-10">
@@ -120,7 +120,7 @@ export function AdPreview({ onRunSimulation, isRunning, selectedPersonaCount = 4
                 }} />
               </div>
               
-              {/* Mock Content */}
+              {/* Preview Content */}
               <div className="relative z-10 text-center px-8">
                 <p className="text-2xl font-display font-bold gradient-text mb-2">
                   "{headline}"

@@ -172,7 +172,7 @@ export function BrandStyleGuideGenerator({
       <div class="font-sample">
         <div class="font-name">Body Font: ${bodyFont}</div>
         <div class="font-body">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
+          Sample paragraph demonstrating the brand's typographic style. This text shows how your body font renders in different weights and sizes across your brand materials.
         </div>
       </div>
     </section>
