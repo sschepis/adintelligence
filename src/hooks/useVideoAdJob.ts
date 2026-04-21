@@ -1,51 +1,84 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "./useAuth";
-import type { ProductionManifest, VideoAdJob } from "@/types/videoAd";
+import { streamEdgeFunction } from "@/lib/sse";
+import type {
+  PlanPhaseEvent,
+  PlanValidationError,
+  ProductionManifest,
+  VideoAdJob,
+} from "@/types/videoAd";
+
+interface PlanInput {
+  brief: string;
+  title?: string;
+  brandId?: string;
+  durationSeconds?: number;
+  aspectRatio?: "16:9" | "9:16" | "1:1";
+  tone?: string;
+  onPhase?: (phase: PlanPhaseEvent) => void;
+  onDna?: (dna: { name: string; colors: string[] }) => void;
+}
 
 export function useVideoAdJob(initialJobId?: string) {
   const { user } = useAuth();
   const [job, setJob] = useState<VideoAdJob | null>(null);
   const [loading, setLoading] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<PlanValidationError[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Plan a manifest (no DB write yet — caller previews + edits before approve)
   const planManifest = useCallback(
-    async (input: {
-      brief: string;
-      title?: string;
-      brandId?: string;
-      durationSeconds?: number;
-      aspectRatio?: "16:9" | "9:16" | "1:1";
-      tone?: string;
-    }): Promise<ProductionManifest | null> => {
+    async (input: PlanInput): Promise<ProductionManifest | null> => {
       if (!user) {
         toast.error("Please sign in");
         return null;
       }
       setPlanning(true);
+      setValidationErrors([]);
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+
+      let result: ProductionManifest | null = null;
       try {
-        const { data, error } = await supabase.functions.invoke("plan-video-ad", {
-          body: input,
+        await streamEdgeFunction({
+          functionName: "plan-video-ad",
+          signal: ctrl.signal,
+          body: {
+            brief: input.brief,
+            title: input.title,
+            brandId: input.brandId,
+            durationSeconds: input.durationSeconds,
+            aspectRatio: input.aspectRatio,
+            tone: input.tone,
+          },
+          onEvent: (evt) => {
+            if (evt.event === "phase") input.onPhase?.(evt.data as PlanPhaseEvent);
+            else if (evt.event === "dna") input.onDna?.(evt.data);
+            else if (evt.event === "manifest") result = (evt.data as any).manifest as ProductionManifest;
+            else if (evt.event === "validation_error") {
+              setValidationErrors((evt.data as any).errors as PlanValidationError[]);
+              toast.error("Manifest validation failed — see details below");
+            } else if (evt.event === "error") {
+              const msg = (evt.data as any).error ?? "Planning failed";
+              toast.error(msg);
+            }
+          },
         });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || "Planning failed");
-        return data.manifest as ProductionManifest;
       } catch (err: any) {
-        const msg = err?.message || "Failed to plan video";
-        if (msg.includes("429")) toast.error("Rate limit exceeded. Try again shortly.");
-        else if (msg.includes("402")) toast.error("AI credits exhausted.");
-        else toast.error(msg);
-        return null;
+        if (err?.name !== "AbortError") {
+          toast.error(err?.message || "Planning stream failed");
+        }
       } finally {
         setPlanning(false);
       }
+      return result;
     },
     [user],
   );
 
-  // Approve a manifest → create a job row (status: queued)
   const startJob = useCallback(
     async (input: {
       title: string;
@@ -98,7 +131,24 @@ export function useVideoAdJob(initialJobId?: string) {
     [user],
   );
 
-  // Load a job by id
+  const cancelJob = useCallback(async () => {
+    if (!job?.id) return;
+    if (!["queued", "rendering", "planning"].includes(job.status)) {
+      toast.message("Job is not active");
+      return;
+    }
+    const { error } = await supabase
+      .from("video_ad_jobs")
+      .update({ status: "cancelled", error: "Cancelled by user" })
+      .eq("id", job.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setJob((prev) => (prev ? { ...prev, status: "cancelled", error: "Cancelled by user" } : prev));
+    toast.success("Render cancelled");
+  }, [job]);
+
   const loadJob = useCallback(async (jobId: string) => {
     setLoading(true);
     try {
@@ -114,7 +164,6 @@ export function useVideoAdJob(initialJobId?: string) {
     }
   }, []);
 
-  // Realtime subscription
   useEffect(() => {
     if (!job?.id) return;
     const channel = supabase
@@ -127,6 +176,7 @@ export function useVideoAdJob(initialJobId?: string) {
           const n = payload.new as VideoAdJob;
           if (n.status === "completed") toast.success("Video ad ready");
           if (n.status === "failed") toast.error(n.error || "Video render failed");
+          if (n.status === "cancelled") toast.message("Render cancelled");
         },
       )
       .subscribe();
@@ -135,10 +185,22 @@ export function useVideoAdJob(initialJobId?: string) {
     };
   }, [job?.id]);
 
-  // Initial load
   useEffect(() => {
     if (initialJobId) loadJob(initialJobId);
   }, [initialJobId, loadJob]);
 
-  return { job, loading, planning, planManifest, startJob, loadJob, setJob };
+  const isActive = !!job && ["queued", "rendering", "planning"].includes(job.status);
+
+  return {
+    job,
+    loading,
+    planning,
+    validationErrors,
+    isActive,
+    planManifest,
+    startJob,
+    cancelJob,
+    loadJob,
+    setJob,
+  };
 }

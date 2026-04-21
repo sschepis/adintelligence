@@ -51,3 +51,16 @@ export interface VideoAdJob {
   updated_at: string;
   completed_at: string | null;
 }
+
+export type PlanPhase = "parse" | "dna" | "storyboard" | "validation" | "manifest";
+
+export interface PlanPhaseEvent {
+  phase: PlanPhase;
+  label: string;
+  progress: number;
+}
+
+export interface PlanValidationError {
+  path: string;
+  message: string;
+}
