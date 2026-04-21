@@ -1,0 +1,9 @@
+{
+  "name": "@concentrik/campaigns-optimizer",
+  "version": "0.1.0",
+  "description": "Real-time campaign morph suggestions, focus-group simulation, optimal timing.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "dependencies": { "@concentrik/gateway-client": "workspace:*" }
+}

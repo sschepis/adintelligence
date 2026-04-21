@@ -1,0 +1,9 @@
+{
+  "name": "@concentrik/creative-video-planner",
+  "version": "0.1.0",
+  "description": "Shotstack-compatible ProductionManifest planning, validation, and timing analysis.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "dependencies": { "@concentrik/gateway-client": "workspace:*" }
+}
