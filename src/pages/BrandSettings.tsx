@@ -239,6 +239,8 @@ export default function BrandSettings() {
       setRederiving(false);
     }
   };
+
+  const handleApplyScannedColors = async () => {
     if (!organization || !scannedBranding) return;
 
     setSaving(true);
