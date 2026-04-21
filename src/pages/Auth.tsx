@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ParticleBackground } from "@/components/effects/ParticleBackground";
 import { GlowingCard } from "@/components/effects/GlowingCard";
 import { supabase } from "@/integrations/supabase/client";
-import { isFreeEmailProvider, getEmailDomain, extractDomainFromUrl } from "@/lib/domainValidation";
+import { getEmailDomain, extractDomainFromUrl } from "@/lib/domainValidation";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
