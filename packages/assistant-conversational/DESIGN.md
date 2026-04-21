@@ -31,3 +31,7 @@ const brief = await assistant.transcribeVoiceToBrief(audioBlob);
 ## Out of scope
 - Persistent conversation storage (host app DB).
 - Authentication (gateway handles).
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

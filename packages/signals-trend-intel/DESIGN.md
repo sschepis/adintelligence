@@ -37,3 +37,7 @@ All five share the same data sources and prompt scaffolding around "fashion/comm
 
 ## Caching
 Trend analyses are cached for 24h keyed by `(trendName, platform)`. Lifecycle predictions invalidate when new weekly data arrives.
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

@@ -35,3 +35,7 @@ All schemas mirror current edge function contracts to make migration mechanical.
 ## Out of scope
 - Inventory sync (Shopify) — host app concern.
 - Order placement / supplier APIs.
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

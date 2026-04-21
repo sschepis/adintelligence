@@ -38,3 +38,7 @@ All five operate on a single conceptual entity — *a live or planned campaign* 
 ## Out of scope
 - Ad platform APIs (Meta/Google) — host app's deployment layer.
 - Budget pacing math (could become `@concentrik/pacing` if it grows).
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.
