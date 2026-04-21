@@ -76,6 +76,8 @@ export interface ScanResult {
   taxonomy: string[];
   products: { name: string; category: string }[];
   brandDNA?: BrandDNA;
+  /** Full structured profile from @sschepis/brand-ingestor; persisted on the brand row. */
+  rawProfile?: Record<string, any>;
 }
 
 export function useLandingOnboarding() {
@@ -151,12 +153,6 @@ export function useLandingOnboarding() {
     
     // Use edited DNA if provided, otherwise use original scan result
     const finalDNA = editedBrandDNA || scanResult.brandDNA;
-
-    // Domain validation disabled for testing
-    // if (!emailMatchesDomain(email, brandUrl)) {
-    //   toast.error("Please use an email from your brand's domain");
-    //   return;
-    // }
 
     setIsRegistering(true);
 
@@ -234,6 +230,9 @@ export function useLandingOnboarding() {
         text_color: scanResult.branding.colors.text || '#ffffff',
         taxonomy: scanResult.taxonomy || [],
         products: scanResult.products || [],
+        // Persist the full structured profile from the ingestor so
+        // we can re-derive any field later without rescanning the site.
+        raw_profile: scanResult.rawProfile ?? null,
       };
 
       if (brandVoice) brandInsertData.brand_voice = brandVoice;
