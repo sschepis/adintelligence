@@ -92,6 +92,26 @@ export function useVideoAdJob(initialJobId?: string) {
       }
       setLoading(true);
       try {
+        // If we already have a draft job for this session, promote it to "queued".
+        if (job?.id && job.status === "draft") {
+          const { data, error } = await supabase
+            .from("video_ad_jobs")
+            .update({
+              title: input.title,
+              brief: input.brief,
+              manifest: input.manifest as any,
+              status: "queued",
+              progress: 0,
+            })
+            .eq("id", job.id)
+            .select()
+            .single();
+          if (error) throw error;
+          const updated = data as unknown as VideoAdJob;
+          setJob(updated);
+          toast.success("Video ad job queued");
+          return updated;
+        }
         const { data: profileRow, error: profileErr } = await supabase
           .from("profiles")
           .select("org_id, active_brand_id")
@@ -128,7 +148,7 @@ export function useVideoAdJob(initialJobId?: string) {
         setLoading(false);
       }
     },
-    [user],
+    [user, job],
   );
 
   /**
