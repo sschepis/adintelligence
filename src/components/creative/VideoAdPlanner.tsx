@@ -9,29 +9,37 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  Film,
-  Sparkles,
-  Loader2,
-  Wand2,
-  Plus,
-  Trash2,
-  Check,
-  Music,
-  Mic,
-  Camera,
+  Film, Sparkles, Loader2, Wand2, Plus, Trash2, Check, Music, Mic, Camera,
+  AlertTriangle, X, CheckCircle2, Circle,
 } from "lucide-react";
 import { useVideoAdJob } from "@/hooks/useVideoAdJob";
-import type { ProductionManifest, ShotPlan, AspectRatio } from "@/types/videoAd";
+import type {
+  ProductionManifest, ShotPlan, AspectRatio, PlanPhaseEvent, PlanPhase,
+} from "@/types/videoAd";
 import { toast } from "sonner";
+import { StoryboardPanel } from "./StoryboardPanel";
 
 interface VideoAdPlannerProps {
   brandId?: string;
   defaultBrief?: string;
 }
 
+const PHASE_ORDER: PlanPhase[] = ["parse", "dna", "storyboard", "validation", "manifest"];
+const PHASE_LABELS: Record<PlanPhase, string> = {
+  parse: "Parse brief",
+  dna: "Brand DNA",
+  storyboard: "Direct shots",
+  validation: "Validate",
+  manifest: "Ready",
+};
+
 export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerProps) {
-  const { job, planning, loading, planManifest, startJob } = useVideoAdJob();
+  const {
+    job, planning, loading, validationErrors, isActive,
+    planManifest, startJob, cancelJob,
+  } = useVideoAdJob();
 
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState(defaultBrief);
@@ -39,12 +47,19 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
   const [aspect, setAspect] = useState<AspectRatio>("9:16");
   const [tone, setTone] = useState("energetic, modern");
   const [manifest, setManifest] = useState<ProductionManifest | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<PlanPhaseEvent | null>(null);
+  const [completedPhases, setCompletedPhases] = useState<Set<PlanPhase>>(new Set());
+  const [brandColors, setBrandColors] = useState<string[] | undefined>(undefined);
 
   const handlePlan = async () => {
     if (!brief.trim()) {
       toast.error("Add a brief first");
       return;
     }
+    setCurrentPhase(null);
+    setCompletedPhases(new Set());
+    setManifest(null);
+
     const m = await planManifest({
       brief,
       title: title || undefined,
@@ -52,6 +67,17 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
       durationSeconds: duration,
       aspectRatio: aspect,
       tone,
+      onPhase: (p) => {
+        setCurrentPhase(p);
+        setCompletedPhases((prev) => {
+          const next = new Set(prev);
+          const idx = PHASE_ORDER.indexOf(p.phase);
+          for (let i = 0; i < idx; i++) next.add(PHASE_ORDER[i]);
+          if (p.progress >= 100) next.add(p.phase);
+          return next;
+        });
+      },
+      onDna: (dna) => setBrandColors(dna.colors),
     });
     if (m) {
       setManifest(m);
@@ -127,11 +153,7 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2 col-span-2">
               <Label>Title (optional)</Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Auto-generated if blank"
-              />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Auto-generated if blank" />
             </div>
             <div className="space-y-2 col-span-2">
               <Label>Brief</Label>
@@ -145,19 +167,14 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
             <div className="space-y-2">
               <Label>Duration (seconds)</Label>
               <Input
-                type="number"
-                min={10}
-                max={120}
-                value={duration}
+                type="number" min={10} max={120} value={duration}
                 onChange={(e) => setDuration(parseInt(e.target.value || "30"))}
               />
             </div>
             <div className="space-y-2">
               <Label>Aspect Ratio</Label>
               <Select value={aspect} onValueChange={(v) => setAspect(v as AspectRatio)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="9:16">9:16 (Vertical / Reels)</SelectItem>
                   <SelectItem value="16:9">16:9 (Landscape / YouTube)</SelectItem>
@@ -171,24 +188,73 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
             </div>
           </div>
 
-          <Button
-            onClick={handlePlan}
-            disabled={planning || !brief.trim()}
-            className="w-full gap-2"
-            variant="gradient"
-          >
+          <Button onClick={handlePlan} disabled={planning || !brief.trim()} className="w-full gap-2" variant="gradient">
             {planning ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Planning shots…
-              </>
+              <><Loader2 className="h-4 w-4 animate-spin" /> Planning shots…</>
             ) : (
-              <>
-                <Wand2 className="h-4 w-4" /> {manifest ? "Re-plan" : "Plan Video"}
-              </>
+              <><Wand2 className="h-4 w-4" /> {manifest ? "Re-plan" : "Plan Video"}</>
             )}
           </Button>
+
+          {/* Phase tracker */}
+          <AnimatePresence>
+            {(planning || currentPhase) && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-3 pt-2"
+              >
+                <Progress value={currentPhase?.progress ?? 0} />
+                <div className="flex items-center justify-between gap-1">
+                  {PHASE_ORDER.map((p) => {
+                    const done = completedPhases.has(p);
+                    const active = currentPhase?.phase === p && planning;
+                    return (
+                      <div key={p} className="flex flex-col items-center gap-1 flex-1">
+                        {done ? (
+                          <CheckCircle2 className="h-4 w-4 text-success" />
+                        ) : active ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-muted-foreground/40" />
+                        )}
+                        <span className={`text-[10px] ${active ? "text-primary font-medium" : done ? "text-foreground" : "text-muted-foreground"}`}>
+                          {PHASE_LABELS[p]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {currentPhase && (
+                  <p className="text-xs text-center text-muted-foreground italic">{currentPhase.label}</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
       </Card>
+
+      {/* Validation errors */}
+      <AnimatePresence>
+        {validationErrors.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Manifest validation failed</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {validationErrors.map((e, i) => (
+                    <li key={i}>
+                      <span className="font-mono opacity-70">{e.path || "manifest"}:</span> {e.message}
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Manifest preview */}
       <AnimatePresence>
@@ -220,9 +286,7 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
                       <Music className="h-3 w-3" /> Soundtrack
                     </div>
                     <p className="text-sm font-medium">{manifest.soundtrack.mood}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {manifest.soundtrack.description}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{manifest.soundtrack.description}</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/40 space-y-1">
                     <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -255,76 +319,42 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
                         className="p-3 rounded-lg border border-border bg-card space-y-2"
                       >
                         <div className="flex items-center gap-2">
-                          <Badge variant="soft" className="shrink-0">
-                            #{idx + 1}
-                          </Badge>
+                          <Badge variant="soft" className="shrink-0">#{idx + 1}</Badge>
                           <Input
-                            type="number"
-                            className="w-20 h-8"
-                            value={shot.durationSeconds}
-                            onChange={(e) =>
-                              updateShot(idx, {
-                                durationSeconds: parseFloat(e.target.value || "0"),
-                              })
-                            }
+                            type="number" className="w-20 h-8" value={shot.durationSeconds}
+                            onChange={(e) => updateShot(idx, { durationSeconds: parseFloat(e.target.value || "0") })}
                           />
                           <span className="text-xs text-muted-foreground">sec</span>
-                          <Select
-                            value={shot.cameraMotion}
-                            onValueChange={(v) => updateShot(idx, { cameraMotion: v as any })}
-                          >
-                            <SelectTrigger className="h-8 flex-1">
-                              <SelectValue />
-                            </SelectTrigger>
+                          <Select value={shot.cameraMotion} onValueChange={(v) => updateShot(idx, { cameraMotion: v as any })}>
+                            <SelectTrigger className="h-8 flex-1"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {["static", "pan-left", "pan-right", "zoom-in", "zoom-out", "dolly", "tilt"].map(
-                                (m) => (
-                                  <SelectItem key={m} value={m}>
-                                    {m}
-                                  </SelectItem>
-                                ),
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            value={shot.transition}
-                            onValueChange={(v) => updateShot(idx, { transition: v as any })}
-                          >
-                            <SelectTrigger className="h-8 w-28">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {["cut", "fade", "dissolve", "wipe", "slide"].map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {t}
-                                </SelectItem>
+                              {["static","pan-left","pan-right","zoom-in","zoom-out","dolly","tilt"].map((m) => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 shrink-0"
-                            onClick={() => removeShot(idx)}
-                          >
+                          <Select value={shot.transition} onValueChange={(v) => updateShot(idx, { transition: v as any })}>
+                            <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {["cut","fade","dissolve","wipe","slide"].map((t) => (
+                                <SelectItem key={t} value={t}>{t}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => removeShot(idx)}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                         <Textarea
-                          rows={2}
-                          value={shot.visualPrompt}
+                          rows={2} value={shot.visualPrompt}
                           onChange={(e) => updateShot(idx, { visualPrompt: e.target.value })}
                           className="text-xs"
                         />
                         {shot.voiceoverLine && (
-                          <div className="text-xs text-muted-foreground italic">
-                            🎙 "{shot.voiceoverLine}"
-                          </div>
+                          <div className="text-xs text-muted-foreground italic">🎙 "{shot.voiceoverLine}"</div>
                         )}
                         {shot.onScreenText && (
-                          <Badge variant="outline" className="text-[10px]">
-                            Text: {shot.onScreenText}
-                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">Text: {shot.onScreenText}</Badge>
                         )}
                       </motion.div>
                     ))}
@@ -333,19 +363,18 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
 
                 <Button
                   onClick={handleApprove}
-                  disabled={loading || !!job}
+                  disabled={loading || isActive}
                   className="w-full gap-2"
                   variant="gradient"
                 >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Check className="h-4 w-4" />
-                  )}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   Approve & Queue Render
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Storyboard preview */}
+            <StoryboardPanel manifest={manifest} brandColors={brandColors} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -356,31 +385,43 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <Card>
               <CardContent className="p-6 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div>
                     <h4 className="font-medium">{job.title}</h4>
                     <p className="text-xs text-muted-foreground">Job #{job.id.slice(0, 8)}</p>
                   </div>
                   <Badge
                     variant={
-                      job.status === "completed"
-                        ? "success"
-                        : job.status === "failed"
-                        ? "destructive"
-                        : "secondary"
+                      job.status === "completed" ? "success"
+                      : job.status === "failed" ? "destructive"
+                      : job.status === "cancelled" ? "outline"
+                      : "secondary"
                     }
                   >
                     {job.status}
                   </Badge>
                 </div>
-                <Progress value={job.progress} />
-                {job.error && <p className="text-xs text-destructive">{job.error}</p>}
+                {isActive && (
+                  <>
+                    <Progress value={job.progress} />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelJob}
+                      className="gap-1 text-destructive hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" /> Cancel render
+                    </Button>
+                  </>
+                )}
+                {job.error && job.status !== "cancelled" && (
+                  <p className="text-xs text-destructive">{job.error}</p>
+                )}
+                {job.status === "cancelled" && (
+                  <p className="text-xs text-muted-foreground italic">Render was cancelled.</p>
+                )}
                 {job.output_url && (
-                  <video
-                    src={job.output_url}
-                    controls
-                    className="w-full rounded-lg border border-border"
-                  />
+                  <video src={job.output_url} controls className="w-full rounded-lg border border-border" />
                 )}
               </CardContent>
             </Card>
