@@ -335,6 +335,7 @@ export function useLandingOnboarding() {
     setBrandUrl,
     step,
     scanResult,
+    scanProgress,
     isRegistering,
     showRegistrationModal,
     setShowRegistrationModal,
