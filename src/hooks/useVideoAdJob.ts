@@ -92,6 +92,26 @@ export function useVideoAdJob(initialJobId?: string) {
       }
       setLoading(true);
       try {
+        // If we already have a draft job for this session, promote it to "queued".
+        if (job?.id && job.status === "draft") {
+          const { data, error } = await supabase
+            .from("video_ad_jobs")
+            .update({
+              title: input.title,
+              brief: input.brief,
+              manifest: input.manifest as any,
+              status: "queued",
+              progress: 0,
+            })
+            .eq("id", job.id)
+            .select()
+            .single();
+          if (error) throw error;
+          const updated = data as unknown as VideoAdJob;
+          setJob(updated);
+          toast.success("Video ad job queued");
+          return updated;
+        }
         const { data: profileRow, error: profileErr } = await supabase
           .from("profiles")
           .select("org_id, active_brand_id")
@@ -128,7 +148,67 @@ export function useVideoAdJob(initialJobId?: string) {
         setLoading(false);
       }
     },
-    [user],
+    [user, job],
+  );
+
+  /**
+   * Create a draft job as soon as planning succeeds so storyboard thumbnails
+   * persist across refreshes before the user clicks Approve.
+   */
+  const ensureDraftJob = useCallback(
+    async (input: {
+      title: string;
+      brief: string;
+      manifest: ProductionManifest;
+      brandId?: string;
+    }): Promise<VideoAdJob | null> => {
+      if (!user) return null;
+      // Already have a job for this session — reuse + sync manifest.
+      if (job?.id) {
+        const { error } = await supabase
+          .from("video_ad_jobs")
+          .update({
+            title: input.title,
+            manifest: input.manifest as any,
+            brief: input.brief,
+          })
+          .eq("id", job.id);
+        if (!error) {
+          setJob((prev) =>
+            prev ? { ...prev, title: input.title, manifest: input.manifest, brief: input.brief } : prev,
+          );
+        }
+        return job;
+      }
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("org_id, active_brand_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!profileRow?.org_id) return null;
+      const { data, error } = await supabase
+        .from("video_ad_jobs")
+        .insert({
+          org_id: profileRow.org_id,
+          user_id: user.id,
+          brand_id: input.brandId ?? profileRow.active_brand_id ?? null,
+          title: input.title,
+          brief: input.brief,
+          manifest: input.manifest as any,
+          status: "draft",
+          progress: 0,
+        })
+        .select()
+        .single();
+      if (error) {
+        console.warn("Failed to create draft job", error);
+        return null;
+      }
+      const created = data as unknown as VideoAdJob;
+      setJob(created);
+      return created;
+    },
+    [user, job],
   );
 
   const saveStoryboardFrames = useCallback(
@@ -205,7 +285,8 @@ export function useVideoAdJob(initialJobId?: string) {
     if (initialJobId) loadJob(initialJobId);
   }, [initialJobId, loadJob]);
 
-  const isActive = !!job && ["queued", "rendering", "planning"].includes(job.status);
+  const isActive = !!job && ["queued", "rendering"].includes(job.status);
+  const isDraft = !!job && job.status === "draft";
 
   return {
     job,
@@ -213,11 +294,13 @@ export function useVideoAdJob(initialJobId?: string) {
     planning,
     validationErrors,
     isActive,
+    isDraft,
     planManifest,
     startJob,
     cancelJob,
     loadJob,
     setJob,
     saveStoryboardFrames,
+    ensureDraftJob,
   };
 }

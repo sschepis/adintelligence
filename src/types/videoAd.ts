@@ -24,6 +24,7 @@ export interface ProductionManifest {
 }
 
 export type VideoAdJobStatus =
+  | "draft"
   | "planning"
   | "queued"
   | "rendering"

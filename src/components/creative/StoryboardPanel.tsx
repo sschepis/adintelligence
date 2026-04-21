@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useImperativeHandle, useState, forwardRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,35 +12,86 @@ import { toast } from "sonner";
 interface StoryboardPanelProps {
   manifest: ProductionManifest;
   brandColors?: string[];
-  /** Persisted frame map keyed by shot index */
+  /** Persisted frame map keyed by shot index (from DB) */
   initialFrames?: Record<string, string> | null;
   /** Called whenever the frame map changes so the parent can persist it */
   onFramesChange?: (frames: Record<string, string>) => void;
+  /** localStorage key for instant hydration before DB roundtrip (e.g. job id) */
+  cacheKey?: string;
 }
 
-export function StoryboardPanel({
-  manifest, brandColors, initialFrames, onFramesChange,
-}: StoryboardPanelProps) {
-  const [frames, setFrames] = useState<Record<number, string>>(() => {
-    if (!initialFrames) return {};
+export interface StoryboardPanelHandle {
+  regenerate: (idx: number) => Promise<void>;
+}
+
+const cacheLoad = (key?: string): Record<number, string> => {
+  if (!key || typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(`vid-storyboard:${key}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
     const out: Record<number, string> = {};
-    for (const [k, v] of Object.entries(initialFrames)) {
+    for (const [k, v] of Object.entries(parsed)) {
       const n = Number(k);
       if (!Number.isNaN(n) && typeof v === "string") out[n] = v;
     }
     return out;
+  } catch {
+    return {};
+  }
+};
+
+const cacheSave = (key: string | undefined, frames: Record<number, string>) => {
+  if (!key || typeof window === "undefined") return;
+  try {
+    const stringKeyed: Record<string, string> = {};
+    for (const [k, v] of Object.entries(frames)) stringKeyed[String(k)] = v;
+    window.localStorage.setItem(`vid-storyboard:${key}`, JSON.stringify(stringKeyed));
+  } catch {
+    /* ignore */
+  }
+};
+
+export const StoryboardPanel = forwardRef<StoryboardPanelHandle, StoryboardPanelProps>(function StoryboardPanel({
+  manifest, brandColors, initialFrames, onFramesChange, cacheKey,
+}, ref) {
+  const [frames, setFrames] = useState<Record<number, string>>(() => {
+    // Prefer DB, fall back to local cache
+    const out: Record<number, string> = {};
+    if (initialFrames) {
+      for (const [k, v] of Object.entries(initialFrames)) {
+        const n = Number(k);
+        if (!Number.isNaN(n) && typeof v === "string") out[n] = v;
+      }
+    }
+    const cached = cacheLoad(cacheKey);
+    return { ...cached, ...out };
   });
   const [loadingIdx, setLoadingIdx] = useState<Set<number>>(new Set());
   const [errorIdx, setErrorIdx] = useState<Set<number>>(new Set());
 
-  // Notify parent when frames change so it can persist them
+  // Notify parent + persist locally when frames change
   useEffect(() => {
+    cacheSave(cacheKey, frames);
     if (!onFramesChange) return;
     const stringKeyed: Record<string, string> = {};
     for (const [k, v] of Object.entries(frames)) stringKeyed[String(k)] = v;
     onFramesChange(stringKeyed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frames]);
+  }, [frames, cacheKey]);
+
+  // When DB data arrives later (after async draft creation), merge it in
+  useEffect(() => {
+    if (!initialFrames) return;
+    setFrames((prev) => {
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(initialFrames)) {
+        const n = Number(k);
+        if (!Number.isNaN(n) && typeof v === "string" && !next[n]) next[n] = v;
+      }
+      return next;
+    });
+  }, [initialFrames]);
 
   const generateFrame = async (idx: number) => {
     const shot = manifest.shots[idx];
@@ -74,6 +125,8 @@ export function StoryboardPanel({
       });
     }
   };
+
+  useImperativeHandle(ref, () => ({ regenerate: (idx: number) => generateFrame(idx) }), [manifest, brandColors]);
 
   const generateAll = async () => {
     for (let i = 0; i < manifest.shots.length; i++) {
@@ -191,4 +244,4 @@ export function StoryboardPanel({
       </CardContent>
     </Card>
   );
-}
+});

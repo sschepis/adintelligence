@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import {
   Film, Sparkles, Loader2, Wand2, Plus, Trash2, Check, Music, Mic, Camera,
-  X, CheckCircle2, Circle, Lock,
+  X, CheckCircle2, Circle, Lock, FileJson, FileImage,
 } from "lucide-react";
 import { useVideoAdJob } from "@/hooks/useVideoAdJob";
 import type {
   ProductionManifest, ShotPlan, AspectRatio, PlanPhaseEvent, PlanPhase,
 } from "@/types/videoAd";
 import { toast } from "sonner";
-import { StoryboardPanel } from "./StoryboardPanel";
+import { StoryboardPanel, type StoryboardPanelHandle } from "./StoryboardPanel";
 import { ManifestTimeline } from "./ManifestTimeline";
 import { ValidationChecklist } from "./ValidationChecklist";
-import { validateManifest, retileManifest, CAMERA_MOTIONS, TRANSITIONS } from "@/lib/manifestValidation";
+import { TimingIssuesPanel } from "./TimingIssuesPanel";
+import { ShotEnumEditor } from "./ShotEnumEditor";
+import { validateManifest, retileManifest } from "@/lib/manifestValidation";
+import { analyzeTiming, retileShot } from "@/lib/manifestTimingAnalysis";
+import { downloadManifestJSON, downloadStoryboardPDF } from "@/lib/manifestExport";
 
 interface VideoAdPlannerProps {
   brandId?: string;
@@ -39,8 +43,8 @@ const PHASE_LABELS: Record<PlanPhase, string> = {
 
 export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerProps) {
   const {
-    job, planning, loading, isActive,
-    planManifest, startJob, cancelJob, saveStoryboardFrames,
+    job, planning, loading, isActive, isDraft,
+    planManifest, startJob, cancelJob, saveStoryboardFrames, ensureDraftJob,
   } = useVideoAdJob();
 
   const [title, setTitle] = useState("");
@@ -53,6 +57,10 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
   const [completedPhases, setCompletedPhases] = useState<Set<PlanPhase>>(new Set());
   const [brandColors, setBrandColors] = useState<string[] | undefined>(undefined);
   const [activeShotIdx, setActiveShotIdx] = useState<number | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const storyboardRef = useRef<StoryboardPanelHandle>(null);
+  const latestFramesRef = useRef<Record<string, string>>({});
 
   // Live client-side validation (mirrors server)
   const liveErrors = useMemo(
@@ -68,11 +76,13 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
     return set;
   }, [liveErrors]);
 
-  // Persist frame map to job whenever it changes
+  const timingIssues = useMemo(() => analyzeTiming(manifest), [manifest]);
+
+  // Persist frame map to job (DB) whenever it changes; also keep ref for export.
   const persistFrames = (frames: Record<string, string>) => {
+    latestFramesRef.current = frames;
     if (job?.id) saveStoryboardFrames(job.id, frames);
   };
-
 
   const handlePlan = async () => {
     if (!brief.trim()) {
@@ -104,7 +114,10 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
     });
     if (m) {
       setManifest(m);
+      const finalTitle = title || m.title;
       if (!title) setTitle(m.title);
+      // Create / refresh draft job so storyboard frames can persist before Approve
+      await ensureDraftJob({ title: finalTitle, brief, manifest: m, brandId });
     }
   };
 
@@ -141,6 +154,20 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
     });
   };
 
+  const handleRetileShot = async (idx: number) => {
+    if (!manifest) return;
+    const next = retileShot(manifest, idx);
+    setManifest(next);
+    setActiveShotIdx(idx);
+    // Regenerate this shot's thumbnail since timing/context changed
+    try {
+      await storyboardRef.current?.regenerate(idx);
+      toast.success(`Shot #${idx + 1} retiled & thumbnail refreshed`);
+    } catch {
+      toast.message(`Shot #${idx + 1} retiled`);
+    }
+  };
+
   const handleApprove = async () => {
     if (!manifest) return;
     await startJob({
@@ -149,6 +176,26 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
       manifest,
       brandId,
     });
+  };
+
+  const handleExportJSON = () => {
+    if (!manifest) return;
+    downloadManifestJSON(manifest, title || manifest.title);
+    toast.success("Manifest JSON downloaded");
+  };
+
+  const handleExportPDF = async () => {
+    if (!manifest) return;
+    setExportingPdf(true);
+    try {
+      const frames = latestFramesRef.current ?? {};
+      await downloadStoryboardPDF(manifest, frames, title || manifest.title);
+      toast.success("Storyboard PDF downloaded");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to export PDF");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const totalDuration = manifest?.shots.reduce((acc, s) => acc + s.durationSeconds, 0) ?? 0;
@@ -269,6 +316,17 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
         )}
       </AnimatePresence>
 
+      {/* Gap/overlap detail panel */}
+      <AnimatePresence>
+        {manifest && timingIssues.length > 0 && (
+          <TimingIssuesPanel
+            issues={timingIssues}
+            onRetileShot={handleRetileShot}
+            onShotClick={(i) => setActiveShotIdx(i)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Manifest preview */}
       <AnimatePresence>
         {manifest && (
@@ -280,16 +338,28 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
           >
             <Card>
               <CardContent className="p-6 space-y-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
                     <h4 className="font-display font-bold text-lg">{manifest.title}</h4>
                     <p className="text-sm text-muted-foreground mt-1">{manifest.concept}</p>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-2 shrink-0 items-center flex-wrap">
                     <Badge variant="outline">{manifest.aspectRatio}</Badge>
                     <Badge variant={totalDuration === manifest.durationSeconds ? "success" : "warning"}>
                       {totalDuration}s / {manifest.durationSeconds}s
                     </Badge>
+                    {isDraft && <Badge variant="soft" className="gap-1"><Sparkles className="h-3 w-3" /> Draft saved</Badge>}
+                    <Button size="sm" variant="outline" onClick={handleExportJSON} className="gap-1 h-8">
+                      <FileJson className="h-3 w-3" /> JSON
+                    </Button>
+                    <Button
+                      size="sm" variant="outline" onClick={handleExportPDF}
+                      disabled={exportingPdf}
+                      className="gap-1 h-8"
+                    >
+                      {exportingPdf ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileImage className="h-3 w-3" />}
+                      PDF
+                    </Button>
                   </div>
                 </div>
 
@@ -350,31 +420,23 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
                             shotHasError ? "border-destructive" : isActive ? "border-primary" : "border-border"
                           }`}
                         >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={shotHasError ? "destructive" : "soft"} className="shrink-0">#{idx + 1}</Badge>
-                            <span className="text-[10px] text-muted-foreground">@{shot.startSeconds.toFixed(1)}s</span>
+                          <div className="flex items-start gap-2 flex-wrap">
+                            <Badge variant={shotHasError ? "destructive" : "soft"} className="shrink-0 mt-1">#{idx + 1}</Badge>
+                            <span className="text-[10px] text-muted-foreground mt-2">@{shot.startSeconds.toFixed(1)}s</span>
                             <Input
                               type="number" step="0.5" min={1} className="w-20 h-8" value={shot.durationSeconds}
                               onChange={(e) => updateShot(idx, { durationSeconds: parseFloat(e.target.value || "0") })}
                               onClick={(e) => e.stopPropagation()}
                             />
-                            <span className="text-xs text-muted-foreground">sec</span>
-                            <Select value={shot.cameraMotion} onValueChange={(v) => updateShot(idx, { cameraMotion: v as any })}>
-                              <SelectTrigger className="h-8 flex-1 min-w-[120px]" onClick={(e) => e.stopPropagation()}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {CAMERA_MOTIONS.map((m) => (
-                                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select value={shot.transition} onValueChange={(v) => updateShot(idx, { transition: v as any })}>
-                              <SelectTrigger className="h-8 w-28" onClick={(e) => e.stopPropagation()}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {TRANSITIONS.map((t) => (
-                                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <span className="text-xs text-muted-foreground mt-2">sec</span>
+                            <ShotEnumEditor
+                              cameraMotion={shot.cameraMotion}
+                              transition={shot.transition}
+                              durationSeconds={shot.durationSeconds}
+                              onCameraMotion={(v) => updateShot(idx, { cameraMotion: v })}
+                              onTransition={(v) => updateShot(idx, { transition: v })}
+                              onClickStop={(e) => e.stopPropagation()}
+                            />
                             <Button
                               size="icon" variant="ghost" className="h-8 w-8 shrink-0"
                               onClick={(e) => { e.stopPropagation(); removeShot(idx); }}
@@ -418,20 +480,22 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
               </CardContent>
             </Card>
 
-            {/* Storyboard preview (persists thumbnails to job once queued) */}
+            {/* Storyboard preview (persists thumbnails to draft job + localStorage) */}
             <StoryboardPanel
+              ref={storyboardRef}
               manifest={manifest}
               brandColors={brandColors}
               initialFrames={job?.storyboard_frames ?? null}
               onFramesChange={persistFrames}
+              cacheKey={job?.id}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Job status */}
+      {/* Job status (only for active/finished renders, not drafts) */}
       <AnimatePresence>
-        {job && (
+        {job && job.status !== "draft" && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <Card>
               <CardContent className="p-6 space-y-3">
