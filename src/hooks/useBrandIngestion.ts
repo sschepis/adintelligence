@@ -303,23 +303,3 @@ export function useBrandIngestion() {
     updateStateField
   };
 }
-
-function parseSseEvent(raw: string): { event: string; data: any } | null {
-  let event = "message";
-  const dataLines: string[] = [];
-  for (const line of raw.split("\n")) {
-    if (line.startsWith(":")) continue; // comment / heartbeat
-    if (line.startsWith("event:")) {
-      event = line.slice(6).trim();
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trim());
-    }
-  }
-  if (dataLines.length === 0) return null;
-  const dataStr = dataLines.join("\n");
-  try {
-    return { event, data: JSON.parse(dataStr) };
-  } catch {
-    return { event, data: dataStr };
-  }
-}
