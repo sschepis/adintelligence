@@ -255,10 +255,6 @@ export function RegistrationModal({
                 </button>
               )}
 
-              <NoticeState
-                type="warning"
-                message={`You must use an email address from @${expectedDomain} to register this brand.`}
-              />
 
               <div className="space-y-2">
                 <Label htmlFor="reg-email">Work Email</Label>
@@ -267,7 +263,7 @@ export function RegistrationModal({
                   <Input
                     id="reg-email"
                     type="email"
-                    placeholder={`you@${expectedDomain}`}
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 h-12 bg-background/50"
