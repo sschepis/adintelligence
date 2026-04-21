@@ -370,6 +370,7 @@ export default function BrandIngestion() {
               <DataCard
                 title="Brand Colors"
                 icon={Palette}
+                live={isRunning}
               >
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(state.colors).map(([key, value]) => (
@@ -393,10 +394,17 @@ export default function BrandIngestion() {
               <DataCard
                 title={`Products (${state.products.length})`}
                 icon={Package}
+                live={isRunning}
               >
                 <div className="space-y-2">
+                  <AnimatePresence initial={false}>
                   {state.products.slice(0, 5).map((product, index) => (
-                    <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50">
+                    <motion.div
+                      key={`${product.name}-${index}`}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50"
+                    >
                       {product.image && (
                         <img 
                           src={product.image} 
@@ -410,8 +418,9 @@ export default function BrandIngestion() {
                           {product.price ? `$${product.price}` : "No price"} · {product.category}
                         </p>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
+                  </AnimatePresence>
                   {state.products.length > 5 && (
                     <p className="text-xs text-muted-foreground text-center">
                       +{state.products.length - 5} more products
@@ -426,6 +435,7 @@ export default function BrandIngestion() {
               <DataCard
                 title="Brand DNA"
                 icon={Brain}
+                live={isRunning}
               >
                 <div className="space-y-3">
                   {state.brandDNA.personality.archetype && (
@@ -439,9 +449,13 @@ export default function BrandIngestion() {
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-1">Traits</p>
                       <div className="flex flex-wrap gap-1">
+                        <AnimatePresence initial={false}>
                         {state.brandDNA.personality.traits.slice(0, 5).map((trait, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">{trait}</Badge>
+                          <motion.div key={trait} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}>
+                            <Badge variant="outline" className="text-xs">{trait}</Badge>
+                          </motion.div>
                         ))}
+                        </AnimatePresence>
                       </div>
                     </div>
                   )}
@@ -450,9 +464,13 @@ export default function BrandIngestion() {
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-1">Emotional Signature</p>
                       <div className="flex flex-wrap gap-1">
+                        <AnimatePresence initial={false}>
                         {state.brandDNA.voice.emotionalSignature.slice(0, 3).map((sig, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">{sig}</Badge>
+                          <motion.div key={sig} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}>
+                            <Badge variant="outline" className="text-xs">{sig}</Badge>
+                          </motion.div>
                         ))}
+                        </AnimatePresence>
                       </div>
                     </div>
                   )}
@@ -465,13 +483,18 @@ export default function BrandIngestion() {
               <DataCard
                 title="Categories"
                 icon={Package}
+                live={isRunning}
               >
                 <div className="flex flex-wrap gap-1">
+                  <AnimatePresence initial={false}>
                   {state.taxonomy.map((cat, index) => (
-                    <Badge key={index} variant="secondary" className="text-xs">
-                      {cat}
-                    </Badge>
+                    <motion.div key={cat} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}>
+                      <Badge variant="secondary" className="text-xs">
+                        {cat}
+                      </Badge>
+                    </motion.div>
                   ))}
+                  </AnimatePresence>
                 </div>
               </DataCard>
             )}
@@ -500,21 +523,29 @@ export default function BrandIngestion() {
 }
 
 // Helper component for data cards
-function DataCard({ 
-  title, 
-  icon: Icon, 
-  children 
-}: { 
-  title: string; 
-  icon: React.ElementType; 
+function DataCard({
+  title,
+  icon: Icon,
+  children,
+  live = false,
+}: {
+  title: string;
+  icon: React.ElementType;
   children: React.ReactNode;
+  live?: boolean;
 }) {
   return (
     <Card className="bg-card/50 backdrop-blur-sm">
       <CardHeader className="py-3 border-b border-border/50">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Icon className="w-4 h-4 text-primary" />
-          {title}
+          <span className="flex-1">{title}</span>
+          {live && (
+            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-primary">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Live
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="py-3">
