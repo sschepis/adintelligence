@@ -242,4 +242,4 @@ export const StoryboardPanel = forwardRef<StoryboardPanelHandle, StoryboardPanel
       </CardContent>
     </Card>
   );
-}
+});
