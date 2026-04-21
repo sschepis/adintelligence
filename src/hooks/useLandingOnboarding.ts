@@ -81,15 +81,23 @@ export interface ScanResult {
   rawProfile?: Record<string, any>;
 }
 
+export interface ScanProgress {
+  step: string;
+  message: string;
+  progress: number;
+}
+
 export function useLandingOnboarding() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [brandUrl, setBrandUrl] = useState("");
   const [step, setStep] = useState<OnboardingStep>('input');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [showAccessRequestForm, setShowAccessRequestForm] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -118,22 +126,47 @@ export function useLandingOnboarding() {
     }
 
     setStep('scanning');
+    setScanResult(null);
+    setScanProgress({ step: "initializing", message: "Starting scan...", progress: 5 });
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let finalResult: any = null;
+    let partialAccum: Partial<ScanResult> = {};
 
     try {
-      const { data, error } = await supabase.functions.invoke('scan-website', {
-        body: { url: brandUrl }
+      await streamEdgeFunction({
+        functionName: "scan-website",
+        body: { url: brandUrl },
+        signal: controller.signal,
+        onEvent: (evt) => {
+          if (evt.event === "phase") {
+            setScanProgress(evt.data);
+          } else if (evt.event === "partial") {
+            // Surface partial branding/products as they arrive
+            partialAccum = { ...partialAccum, ...(evt.data ?? {}) };
+            setScanResult((prev) => ({ ...(prev ?? {} as ScanResult), ...partialAccum } as ScanResult));
+          } else if (evt.event === "result") {
+            finalResult = evt.data;
+          } else if (evt.event === "error") {
+            throw new Error(evt.data?.message ?? "Scan failed");
+          }
+        },
       });
 
-      if (error) throw error;
+      const data = finalResult;
+      if (!data) throw new Error("Scan ended without a result");
 
       setStep('analyzing');
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise((r) => setTimeout(r, 800));
 
       if (!data.isBrand || !data.products || data.products.length === 0) {
         setScanResult({
           ...data,
           isBrand: false,
-          reason: data.reason || "We couldn't identify this as a brand with products or services for sale."
+          reason: data.reason || "We couldn't identify this as a brand with products or services for sale.",
         });
         setStep('rejected');
         return;
@@ -142,9 +175,10 @@ export function useLandingOnboarding() {
       setScanResult(data);
       setStep('success');
       setShowRegistrationModal(true);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "AbortError") return;
       console.error('Scan error:', error);
-      toast.error("Failed to scan website. Please try again.");
+      toast.error(error?.message || "Failed to scan website. Please try again.");
       setStep('input');
     }
   };
