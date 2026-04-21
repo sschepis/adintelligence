@@ -3,7 +3,7 @@ import { runBrandIngestion } from "../_shared/brand-ingestor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, accept",
 };
 
 interface IngestionState {
@@ -20,11 +20,12 @@ interface IngestionState {
 }
 
 /**
- * Agentic ingestion endpoint, now backed by @sschepis/brand-ingestor.
+ * Agentic ingestion endpoint, backed by @sschepis/brand-ingestor.
  *
- * The library handles its own multi-step crawl + LLM extraction, so this
- * endpoint runs in a single call but preserves the response contract used
- * by `useBrandIngestion` (assistantMessage, progressUpdates, state, etc.).
+ * Modes:
+ *  - When the client sends `Accept: text/event-stream`, the response is a
+ *    streamed SSE feed of progress events ending with a final `result` event.
+ *  - Otherwise (legacy / `continue`), it returns a single JSON response.
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -42,7 +43,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // If we're "continuing" but the state already shows completion, no-op.
+    // No-op continuation
     if (action === "continue" && incomingState?.phase === "complete") {
       return new Response(
         JSON.stringify({
@@ -65,23 +66,22 @@ serve(async (req) => {
     let normalizedUrl = targetUrl.trim();
     if (!/^https?:\/\//i.test(normalizedUrl)) normalizedUrl = `https://${normalizedUrl}`;
 
-    console.log("[INGESTION-AGENT] Running brand-ingestor for", normalizedUrl);
+    const wantsSSE = (req.headers.get("accept") ?? "").includes("text/event-stream");
+    console.log("[INGESTION-AGENT]", { url: normalizedUrl, sse: wantsSSE });
 
-    const progressUpdates = [
-      { type: "progress", step: "scraping", message: "Crawling site and extracting brand data...", progress: 25 },
-    ];
+    if (wantsSSE) {
+      return streamIngestion(normalizedUrl, apiKey);
+    }
 
+    // Non-streaming fallback path
+    const phaseEvents: Array<{ step: string; message: string; progress: number }> = [];
     const result = await runBrandIngestion({
       url: normalizedUrl,
       apiKey,
       maxPages: 20,
       concurrency: 2,
+      onPhase: (p) => phaseEvents.push(p),
     });
-
-    progressUpdates.push(
-      { type: "progress", step: "analyzing", message: "Analyzing brand identity and products...", progress: 70 },
-      { type: "progress", step: "complete", message: "Ingestion complete.", progress: 100 },
-    );
 
     const newState: IngestionState = {
       url: normalizedUrl,
@@ -109,10 +109,9 @@ serve(async (req) => {
         reviewRequest: null,
         isComplete: true,
         completeSummary: summary,
-        progressUpdates,
-        conversationMessages: [
-          { role: "assistant", content: summary },
-        ],
+        progressUpdates: phaseEvents.map((p) => ({ type: "progress", ...p })),
+        conversationMessages: [{ role: "assistant", content: summary }],
+        rawProfile: result.rawProfile,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
@@ -127,3 +126,77 @@ serve(async (req) => {
     );
   }
 });
+
+/**
+ * Streams ingestion progress as SSE. Emits one `phase` event per step,
+ * a final `result` event with the full state, and closes.
+ */
+function streamIngestion(url: string, apiKey: string): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(
+          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+        );
+      };
+      // Heartbeat so intermediaries don't buffer the stream
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(encoder.encode(`: ping\n\n`)); } catch { /* ignore */ }
+      }, 15_000);
+
+      try {
+        send("phase", { step: "initializing", message: `Starting ingestion for ${url}`, progress: 5 });
+
+        const result = await runBrandIngestion({
+          url,
+          apiKey,
+          maxPages: 20,
+          concurrency: 2,
+          onPhase: (p) => send("phase", p),
+        });
+
+        const newState: IngestionState = {
+          url,
+          phase: "complete",
+          brandName: result.brandName,
+          colors: result.branding.colors,
+          products: result.products,
+          taxonomy: result.taxonomy,
+          brandDNA: result.brandDNA,
+          metadata: result.metadata,
+          pagesScanned: result.metadata?.pagesScanned ?? result.products.length + 1,
+          errors: [],
+        };
+
+        send("phase", { step: "complete", message: "Ingestion complete.", progress: 100 });
+        send("result", {
+          success: true,
+          state: newState,
+          rawProfile: result.rawProfile,
+          scanResult: result,
+          completeSummary:
+            `Ingested ${result.brandName}: ${result.products.length} products, ` +
+            `${result.taxonomy.length} categories, brand colors and DNA extracted.`,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[INGESTION-AGENT] SSE error:", message);
+        send("error", { message });
+      } finally {
+        clearInterval(heartbeat);
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
