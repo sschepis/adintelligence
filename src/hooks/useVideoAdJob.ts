@@ -2,12 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "./useAuth";
-import { useProfile } from "./useProfile";
 import type { ProductionManifest, VideoAdJob } from "@/types/videoAd";
 
 export function useVideoAdJob(initialJobId?: string) {
   const { user } = useAuth();
-  const { profile } = useProfile();
   const [job, setJob] = useState<VideoAdJob | null>(null);
   const [loading, setLoading] = useState(false);
   const [planning, setPlanning] = useState(false);
@@ -55,18 +53,28 @@ export function useVideoAdJob(initialJobId?: string) {
       manifest: ProductionManifest;
       brandId?: string;
     }): Promise<VideoAdJob | null> => {
-      if (!user || !profile?.org_id) {
-        toast.error("No active organization");
+      if (!user) {
+        toast.error("Please sign in");
         return null;
       }
       setLoading(true);
       try {
+        const { data: profileRow, error: profileErr } = await supabase
+          .from("profiles")
+          .select("org_id, active_brand_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (profileErr) throw profileErr;
+        if (!profileRow?.org_id) {
+          toast.error("No active organization");
+          return null;
+        }
         const { data, error } = await supabase
           .from("video_ad_jobs")
           .insert({
-            org_id: profile.org_id,
+            org_id: profileRow.org_id,
             user_id: user.id,
-            brand_id: input.brandId ?? profile.active_brand_id ?? null,
+            brand_id: input.brandId ?? profileRow.active_brand_id ?? null,
             title: input.title,
             brief: input.brief,
             manifest: input.manifest as any,
@@ -87,7 +95,7 @@ export function useVideoAdJob(initialJobId?: string) {
         setLoading(false);
       }
     },
-    [user, profile],
+    [user],
   );
 
   // Load a job by id
