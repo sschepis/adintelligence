@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorState, NoticeState } from "@/components/shared";
-import { emailMatchesDomain, extractDomainFromUrl } from "@/lib/domainValidation";
+import { extractDomainFromUrl } from "@/lib/domainValidation";
 import { BrandDNAPreview } from "./BrandDNAPreview";
 
 interface BrandDNA {
