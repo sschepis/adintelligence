@@ -1060,6 +1060,84 @@ export type Database = {
         }
         Relationships: []
       }
+      video_ad_jobs: {
+        Row: {
+          brand_id: string | null
+          brief: string | null
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          manifest: Json
+          metadata: Json | null
+          org_id: string
+          output_url: string | null
+          progress: number
+          provider: string | null
+          provider_job_id: string | null
+          status: string
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          brief?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          manifest?: Json
+          metadata?: Json | null
+          org_id: string
+          output_url?: string | null
+          progress?: number
+          provider?: string | null
+          provider_job_id?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand_id?: string | null
+          brief?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          manifest?: Json
+          metadata?: Json | null
+          org_id?: string
+          output_url?: string | null
+          progress?: number
+          provider?: string | null
+          provider_job_id?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_ad_jobs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_ad_jobs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       visual_analysis_cache: {
         Row: {
           aesthetic_style: string | null
