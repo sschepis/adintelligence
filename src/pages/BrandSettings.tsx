@@ -25,6 +25,7 @@ export default function BrandSettings() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [rederiving, setRederiving] = useState(false);
   const [showCompareDialog, setShowCompareDialog] = useState(false);
   const [scannedBranding, setScannedBranding] = useState<ScannedBranding | null>(null);
   const [selectedColors, setSelectedColors] = useState<Record<ColorKey, boolean>>({
@@ -210,7 +211,34 @@ export default function BrandSettings() {
     }
   };
 
-  const handleApplyScannedColors = async () => {
+  const handleRederive = async () => {
+    // Re-derive on the active brand row. We look up the active brand via profile.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('active_brand_id')
+      .eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '')
+      .maybeSingle();
+    const brandId = profile?.active_brand_id;
+    if (!brandId) {
+      toast.error("No active brand to re-derive");
+      return;
+    }
+    setRederiving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('rederive-from-raw-profile', {
+        body: { brandId, applyToBrand: true },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Re-derive failed");
+      await refetch();
+      toast.success("Brand re-derived from stored profile");
+    } catch (e: any) {
+      console.error('Re-derive error:', e);
+      toast.error(e.message || "Failed to re-derive brand");
+    } finally {
+      setRederiving(false);
+    }
+  };
     if (!organization || !scannedBranding) return;
 
     setSaving(true);
@@ -289,11 +317,11 @@ export default function BrandSettings() {
             AI Brand Scan
           </CardTitle>
           <CardDescription>
-            Rescan your website to automatically detect and update brand colors and logo
+            Rescan your website, or re-derive colors/taxonomy/Brand DNA from the last full scan without hitting your site again.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-muted-foreground">
               {organization?.website_url ? (
                 <span>Website: <span className="font-medium text-foreground">{organization.website_url}</span></span>
@@ -301,23 +329,26 @@ export default function BrandSettings() {
                 <span>No website URL configured</span>
               )}
             </div>
-            <Button 
-              onClick={handleRescanBrand} 
-              disabled={rescanning || !organization?.website_url}
-              variant="outline"
-            >
-              {rescanning ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Rescan Website
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleRederive} disabled={rederiving} variant="outline">
+                {rederiving ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Re-deriving...</>
+                ) : (
+                  <><Dna className="h-4 w-4 mr-2" />Re-derive from raw profile</>
+                )}
+              </Button>
+              <Button
+                onClick={handleRescanBrand}
+                disabled={rescanning || !organization?.website_url}
+                variant="outline"
+              >
+                {rescanning ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Scanning...</>
+                ) : (
+                  <><RefreshCw className="h-4 w-4 mr-2" />Rescan Website</>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
