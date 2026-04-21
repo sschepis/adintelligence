@@ -14,8 +14,10 @@ describe("@concentrik/brand-dna-engine", () => {
       expect(typeof (e as any)[m]).toBe("function");
     }
   });
-  it("ingestWebsite returns a Promise", () => {
+  it("ingestWebsite returns a Promise that rejects in stub state", async () => {
     const e = new BrandDNAEngine(mockGateway);
-    expect(e.ingestWebsite("https://acme.com")).toBeInstanceOf(Promise);
+    const p = e.ingestWebsite("https://acme.com");
+    expect(p).toBeInstanceOf(Promise);
+    await expect(p).rejects.toThrow("STUB");
   });
 });
