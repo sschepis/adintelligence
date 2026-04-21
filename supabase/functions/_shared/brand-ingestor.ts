@@ -353,7 +353,8 @@ export function mapProfileToScanResult(
 
 /**
  * Run the full brand ingestion pipeline against a URL using the
- * Lovable AI Gateway as the LLM backend.
+ * Lovable AI Gateway as the LLM backend. Emits coarse-grained phase
+ * events via `onPhase` so callers can stream progress to a UI.
  */
 export async function runBrandIngestion(opts: {
   url: string;
@@ -361,12 +362,26 @@ export async function runBrandIngestion(opts: {
   model?: string;
   maxPages?: number;
   concurrency?: number;
+  onPhase?: (event: PhaseEvent) => void;
 }): Promise<ScanResultPayload> {
-  const llmProvider = createLovableLLMProvider({ apiKey: opts.apiKey, model: opts.model });
+  const emit = (e: PhaseEvent) => opts.onPhase?.(e);
+
+  emit({ step: "detecting_platform", message: "Detecting site platform...", progress: 15 });
+
+  const llmProvider = createLovableLLMProvider({
+    apiKey: opts.apiKey,
+    model: opts.model,
+    onPhase: opts.onPhase,
+  });
+
+  emit({ step: "fetching_products", message: "Crawling site and fetching products...", progress: 35 });
+
   const profile = await ingestBrand(opts.url, {
     llmProvider,
     maxPages: opts.maxPages ?? 20,
     concurrency: opts.concurrency ?? 2,
   });
+
+  emit({ step: "mapping", message: "Finalizing brand profile...", progress: 90 });
   return mapProfileToScanResult(profile, opts.url);
 }
