@@ -108,6 +108,8 @@ const createInitialState = (url: string): IngestionState => ({
   errors: []
 });
 
+const FUNCTIONS_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/brand-ingestion-agent`;
+
 export function useBrandIngestion() {
   const [state, setState] = useState<IngestionState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -119,9 +121,9 @@ export function useBrandIngestion() {
   const [reviewRequest, setReviewRequest] = useState<ReviewRequest | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [completeSummary, setCompleteSummary] = useState("");
-  
-  const conversationRef = useRef<any[]>([]);
-  const abortRef = useRef(false);
+  const [rawProfile, setRawProfile] = useState<any>(null);
+
+  const abortRef = useRef<AbortController | null>(null);
 
   const addProgressUpdate = useCallback((update: Omit<ProgressUpdate, "timestamp">) => {
     const fullUpdate = { ...update, timestamp: new Date() };
@@ -131,105 +133,20 @@ export function useBrandIngestion() {
   }, []);
 
   const addChatMessage = useCallback((message: Omit<ChatMessage, "id" | "timestamp">) => {
-    const fullMessage = { 
-      ...message, 
+    const fullMessage = {
+      ...message,
       id: crypto.randomUUID(),
-      timestamp: new Date() 
+      timestamp: new Date()
     };
     setChatMessages(prev => [...prev, fullMessage]);
   }, []);
 
-  const callAgent = useCallback(async (
-    action: "start" | "continue",
-    url?: string,
-    userInput?: string,
-    reviewedData?: { section: string; data: any }
-  ) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("brand-ingestion-agent", {
-        body: {
-          action,
-          url,
-          messages: conversationRef.current,
-          state: state || (url ? createInitialState(url) : null),
-          userInput,
-          reviewedData
-        }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Agent call failed");
-
-      // Update state
-      if (data.state) {
-        setState(data.state);
-      }
-
-      // Update conversation history
-      if (data.conversationMessages) {
-        conversationRef.current = data.conversationMessages;
-      }
-
-      // Add assistant message to chat
-      if (data.assistantMessage) {
-        addChatMessage({ role: "assistant", content: data.assistantMessage });
-      }
-
-      // Handle progress updates
-      if (data.progressUpdates) {
-        for (const update of data.progressUpdates) {
-          addProgressUpdate({
-            message: update.message,
-            step: update.step,
-            progress: update.progress
-          });
-        }
-      }
-
-      // Handle review request
-      if (data.requiresUserAction && data.reviewRequest) {
-        setReviewRequest(data.reviewRequest);
-        setIsPaused(true);
-        addChatMessage({
-          role: "assistant",
-          content: data.reviewRequest.message
-        });
-      }
-
-      // Handle completion
-      if (data.isComplete) {
-        setIsComplete(true);
-        setCompleteSummary(data.completeSummary || "Brand ingestion complete!");
-        setIsRunning(false);
-        addProgressUpdate({
-          message: "Ingestion complete!",
-          step: "complete",
-          progress: 100
-        });
-      }
-
-      return data;
-    } catch (error: any) {
-      console.error("Agent call error:", error);
-      if (error.message?.includes("429")) {
-        toast.error("Rate limit exceeded. Please try again in a moment.");
-      } else if (error.message?.includes("402")) {
-        toast.error("AI credits exhausted. Please add credits to continue.");
-      } else {
-        toast.error(error.message || "Failed to process ingestion step");
-      }
-      throw error;
-    }
-  }, [state, addChatMessage, addProgressUpdate]);
-
   const startIngestion = useCallback(async (url: string) => {
-    // Normalize URL
     let normalizedUrl = url.trim();
     if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
       normalizedUrl = "https://" + normalizedUrl;
     }
 
-    // Reset state
     setState(createInitialState(normalizedUrl));
     setIsRunning(true);
     setIsPaused(false);
@@ -238,155 +155,144 @@ export function useBrandIngestion() {
     setProgressUpdates([]);
     setChatMessages([]);
     setReviewRequest(null);
-    conversationRef.current = [];
-    abortRef.current = false;
+    setRawProfile(null);
 
     addProgressUpdate({
       message: "Starting brand ingestion...",
       step: "initializing",
-      progress: 5
+      progress: 5,
     });
 
     addChatMessage({
       role: "system",
-      content: `Starting ingestion for ${normalizedUrl}. I'll guide you through each step and pause for your review at key checkpoints.`
+      content: `Starting ingestion for ${normalizedUrl}. You'll see live progress updates as we detect the site platform, fetch products, and extract brand identity.`,
     });
 
+    // Cancel any prior stream
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      await callAgent("start", normalizedUrl);
-      
-      // Continue the agentic loop until paused, complete, or aborted
-      while (!abortRef.current && !isPaused && !isComplete) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Small delay between steps
-        
-        if (abortRef.current || isPaused || isComplete) break;
-        
-        const result = await callAgent("continue");
-        
-        if (result.requiresUserAction || result.isComplete) {
-          break;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const response = await fetch(FUNCTIONS_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(apikey ? { apikey } : {}),
+        },
+        body: JSON.stringify({ action: "start", url: normalizedUrl }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Ingestion request failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE messages are separated by a blank line
+        let sepIndex: number;
+        while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, sepIndex);
+          buffer = buffer.slice(sepIndex + 2);
+          const parsed = parseSseEvent(rawEvent);
+          if (!parsed) continue;
+          handleSseEvent(parsed);
         }
       }
-    } catch (error) {
-      setIsRunning(false);
+    } catch (error: any) {
+      if (error.name === "AbortError") return;
+      console.error("[useBrandIngestion] SSE error:", error);
+      toast.error(error.message || "Failed to ingest brand");
       addProgressUpdate({
-        message: "Ingestion failed. Check console for details.",
+        message: `Ingestion failed: ${error.message ?? "Unknown error"}`,
         step: "error",
-        progress: currentProgress
+        progress: currentProgress,
       });
+      setIsRunning(false);
     }
-  }, [callAgent, addProgressUpdate, addChatMessage, currentProgress, isPaused, isComplete]);
+
+    function handleSseEvent(evt: { event: string; data: any }) {
+      if (evt.event === "phase") {
+        addProgressUpdate({
+          message: evt.data.message,
+          step: evt.data.step,
+          progress: evt.data.progress,
+        });
+      } else if (evt.event === "result") {
+        if (evt.data.state) setState(evt.data.state);
+        if (evt.data.rawProfile) setRawProfile(evt.data.rawProfile);
+        const summary = evt.data.completeSummary || "Brand ingestion complete!";
+        setCompleteSummary(summary);
+        setIsComplete(true);
+        setIsRunning(false);
+        addChatMessage({ role: "assistant", content: summary });
+        addProgressUpdate({ message: "Ingestion complete!", step: "complete", progress: 100 });
+      } else if (evt.event === "error") {
+        const message = evt.data?.message ?? "Unknown ingestion error";
+        toast.error(message);
+        addProgressUpdate({ message: `Error: ${message}`, step: "error", progress: currentProgress });
+        setIsRunning(false);
+      }
+    }
+  }, [addChatMessage, addProgressUpdate, currentProgress]);
 
   const pauseIngestion = useCallback(() => {
     setIsPaused(true);
-    abortRef.current = true;
+    abortRef.current?.abort();
     addChatMessage({
       role: "system",
-      content: "Ingestion paused. You can review and edit the data, then click continue to resume."
+      content: "Ingestion paused. The current scan was cancelled.",
     });
   }, [addChatMessage]);
 
   const resumeIngestion = useCallback(async () => {
+    // The new SSE pipeline is one-shot; resume == restart from the same URL.
     setIsPaused(false);
-    setReviewRequest(null);
-    abortRef.current = false;
+    if (state?.url) {
+      await startIngestion(state.url);
+    }
+  }, [state?.url, startIngestion]);
 
+  const sendChatMessage = useCallback(async (_message: string) => {
     addChatMessage({
       role: "system",
-      content: "Resuming ingestion..."
+      content: "Chat is read-only during streaming ingestion.",
     });
+  }, [addChatMessage]);
 
-    try {
-      const result = await callAgent("continue");
-      
-      // Continue the loop
-      while (!abortRef.current && !result.requiresUserAction && !result.isComplete) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        if (abortRef.current) break;
-        
-        const nextResult = await callAgent("continue");
-        if (nextResult.requiresUserAction || nextResult.isComplete) break;
-      }
-    } catch (error) {
-      console.error("Resume error:", error);
-    }
-  }, [callAgent, addChatMessage]);
-
-  const sendChatMessage = useCallback(async (message: string) => {
-    addChatMessage({ role: "user", content: message });
-    
-    try {
-      await callAgent("continue", undefined, message);
-    } catch (error) {
-      console.error("Chat message error:", error);
-    }
-  }, [callAgent, addChatMessage]);
-
-  const submitReview = useCallback(async (section: string, data: any) => {
+  const submitReview = useCallback(async (_section: string, _data: any) => {
     setReviewRequest(null);
     setIsPaused(false);
-
-    addChatMessage({
-      role: "user",
-      content: `I've reviewed and updated the ${section}. Please continue.`
-    });
-
-    // Update local state with reviewed data
-    setState(prev => {
-      if (!prev) return prev;
-      
-      switch (section) {
-        case "colors":
-          return { ...prev, colors: data };
-        case "products":
-          return { ...prev, products: data };
-        case "taxonomy":
-          return { ...prev, taxonomy: data };
-        case "brandVoice":
-          return { ...prev, brandDNA: { ...prev.brandDNA, voice: data } };
-        case "brandStory":
-          return { ...prev, brandDNA: { ...prev.brandDNA, story: data } };
-        case "brandPersonality":
-          return { ...prev, brandDNA: { ...prev.brandDNA, personality: data } };
-        case "guardrails":
-          return { ...prev, brandDNA: { ...prev.brandDNA, guardrails: data } };
-        default:
-          return prev;
-      }
-    });
-
-    try {
-      await callAgent("continue", undefined, undefined, { section, data });
-      
-      // Continue the loop
-      while (!abortRef.current) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        if (abortRef.current) break;
-        
-        const result = await callAgent("continue");
-        if (result.requiresUserAction || result.isComplete) break;
-      }
-    } catch (error) {
-      console.error("Submit review error:", error);
-    }
-  }, [callAgent, addChatMessage]);
+  }, []);
 
   const updateStateField = useCallback(<K extends keyof IngestionState>(
-    field: K, 
+    field: K,
     value: IngestionState[K]
   ) => {
     setState(prev => prev ? { ...prev, [field]: value } : prev);
   }, []);
 
   const stopIngestion = useCallback(() => {
-    abortRef.current = true;
+    abortRef.current?.abort();
     setIsRunning(false);
     setIsPaused(false);
     addChatMessage({
       role: "system",
-      content: "Ingestion stopped."
+      content: "Ingestion stopped.",
     });
   }, [addChatMessage]);
 
@@ -401,6 +307,7 @@ export function useBrandIngestion() {
     currentProgress,
     currentStep,
     reviewRequest,
+    rawProfile,
     startIngestion,
     pauseIngestion,
     resumeIngestion,
@@ -409,4 +316,24 @@ export function useBrandIngestion() {
     submitReview,
     updateStateField
   };
+}
+
+function parseSseEvent(raw: string): { event: string; data: any } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of raw.split("\n")) {
+    if (line.startsWith(":")) continue; // comment / heartbeat
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trim());
+    }
+  }
+  if (dataLines.length === 0) return null;
+  const dataStr = dataLines.join("\n");
+  try {
+    return { event, data: JSON.parse(dataStr) };
+  } catch {
+    return { event, data: dataStr };
+  }
 }
