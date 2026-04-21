@@ -37,3 +37,7 @@ This is the most schema-heavy domain in the app and the validation/timing logic 
 - Actual rendering (handled by Shotstack/Remotion service).
 - Storyboard image generation (delegated to `@concentrik/creative-visual-forge`).
 - Job persistence (host app's `video_ad_jobs` table).
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

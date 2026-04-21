@@ -31,3 +31,7 @@ const analysis = await visual.analyzeProductImage(url, trendColors);
 ## Out of scope
 - Storage / CDN (host app uploads to Supabase Storage).
 - Video rendering.
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

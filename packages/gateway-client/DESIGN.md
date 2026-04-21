@@ -36,3 +36,7 @@ Designed to run in **both** Deno (Supabase edge functions) and Node/browser. Use
 ## Out of scope
 - Provider routing / fallback (handled by Gateway itself).
 - Embeddings (separate `@concentrik/embeddings` if ever needed).
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

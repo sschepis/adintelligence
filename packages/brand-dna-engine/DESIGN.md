@@ -45,3 +45,7 @@ const level = await engine.detectDrift(recent, baseline);
 ## Out of scope
 - Color/theme extraction (lives in host app's brand theme module — could become `@concentrik/brand-theme` later).
 - Storage; package is stateless.
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

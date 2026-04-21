@@ -1,5 +1,9 @@
 // @concentrik/gateway-client — STUB
-// See DESIGN.md for full architecture.
+// See ../SHARED_DESIGN.md for cross-package conventions (models, streaming, errors).
+
+import type { StreamEvent, ToolDefinition } from "@concentrik/shared";
+
+export type { StreamEvent, ToolDefinition } from "@concentrik/shared";
 
 export interface GatewayClientConfig {
   apiKey: string;
@@ -21,15 +25,8 @@ export interface ChatCompletionOptions {
   signal?: AbortSignal;
 }
 
-export interface ToolDefinition { name: string; description: string; parameters: Record<string, unknown>; }
-
-export interface StreamEvent {
-  type: "token" | "tool_call" | "stage" | "done" | "error";
-  data: unknown;
-}
-
 export class GatewayClient {
-  constructor(_config: GatewayClientConfig) { throw new Error("STUB: not implemented"); }
+  constructor(_config: GatewayClientConfig) { /* STUB */ }
   async chat(_opts: ChatCompletionOptions): Promise<string> { throw new Error("STUB"); }
   async chatJSON<T>(_opts: ChatCompletionOptions): Promise<T> { throw new Error("STUB"); }
   stream(_opts: ChatCompletionOptions): AsyncIterable<StreamEvent> { throw new Error("STUB"); }

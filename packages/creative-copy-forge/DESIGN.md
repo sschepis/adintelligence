@@ -33,3 +33,7 @@ Pairs naturally with `@concentrik/brand-dna-engine`'s `scoreConsistency` for a g
 ## Out of scope
 - Image/video generation.
 - Translation (could become `@concentrik/i18n` later).
+
+---
+
+📐 Conforms to [SHARED_DESIGN.md](../SHARED_DESIGN.md) — model names, tool-call shapes, streaming events, and error types are defined there.

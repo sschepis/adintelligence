@@ -5,5 +5,8 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "private": true,
-  "dependencies": { "@concentrik/gateway-client": "workspace:*" }
+  "dependencies": {
+    "@concentrik/gateway-client": "workspace:*",
+    "@concentrik/shared": "workspace:*"
+  }
 }

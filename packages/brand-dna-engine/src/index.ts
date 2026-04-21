@@ -1,21 +1,9 @@
 // @concentrik/brand-dna-engine — STUB
+// See ../SHARED_DESIGN.md for cross-package conventions.
 import type { GatewayClient } from "@concentrik/gateway-client";
+import type { BrandProfile, BrandVoice } from "@concentrik/shared";
 
-export interface BrandProfile {
-  name: string;
-  websiteUrl: string;
-  voice?: BrandVoice;
-  personality?: BrandPersonality;
-  story?: BrandStory;
-  guardrails?: BrandGuardrails;
-  taxonomy?: BrandTaxonomy;
-  rawProfile?: unknown;
-}
-export interface BrandVoice { tone: string[]; vocabulary: string[]; samplePhrases: string[]; }
-export interface BrandPersonality { archetype: string; traits: string[]; }
-export interface BrandStory { mission: string; values: string[]; origin: string; }
-export interface BrandGuardrails { do: string[]; dont: string[]; forbiddenTerms: string[]; }
-export interface BrandTaxonomy { categories: string[]; productTypes: string[]; }
+export type { BrandProfile, BrandVoice } from "@concentrik/shared";
 
 export interface ConsistencyScore {
   overall: number;

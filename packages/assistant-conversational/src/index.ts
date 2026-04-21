@@ -1,11 +1,11 @@
 // @concentrik/assistant-conversational — STUB
-import type { GatewayClient, ChatMessage, ToolDefinition } from "@concentrik/gateway-client";
+// See ../SHARED_DESIGN.md for cross-package conventions.
+import type { GatewayClient, ChatMessage } from "@concentrik/gateway-client";
+import type { ToolDefinition } from "@concentrik/shared";
 
 export interface AssistantContext { brandDNA?: unknown; campaignId?: string; pageContext?: string; }
 export interface AssistantTurn { reply: string; reasoning?: string; toolCallsUsed: string[]; }
-
 export interface AnalyticsAnswer { answer: string; chart?: { type: "line" | "bar" | "pie"; series: unknown[] }; sql?: string; assumptions: string[]; }
-
 export interface VoiceBrief { rawTranscript: string; brief: { goal: string; audience: string; product: string; tone: string; deliverables: string[] }; }
 
 export class ConversationalAssistant {
