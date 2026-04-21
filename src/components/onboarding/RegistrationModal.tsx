@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Mail, Lock, ArrowRight, Loader2, CheckCircle2, Building2, Edit2, Dna, ChevronLeft } from "lucide-react";
+import { X, Mail, Lock, ArrowRight, Loader2, CheckCircle2, Edit2, Dna, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ErrorState, NoticeState } from "@/components/shared";
-import { emailMatchesDomain, extractDomainFromUrl } from "@/lib/domainValidation";
+import { ErrorState } from "@/components/shared";
 import { BrandDNAPreview } from "./BrandDNAPreview";
 
 interface BrandDNA {
@@ -61,17 +60,9 @@ export function RegistrationModal({
   const [step, setStep] = useState<'dna' | 'register'>(scanResult.brandDNA ? 'dna' : 'register');
   const [editedDNA, setEditedDNA] = useState<BrandDNA | undefined>(scanResult.brandDNA);
 
-  const expectedDomain = extractDomainFromUrl(websiteUrl);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    // Email domain validation disabled for testing
-    // if (!emailMatchesDomain(email, websiteUrl)) {
-    //   setError(`Please use an email address from @${expectedDomain}`);
-    //   return;
-    // }
 
     // Validate password
     if (password.length < 6) {

@@ -73,17 +73,48 @@ function zodToJsonSchema(schema: any): any {
   }
 }
 
+export interface PhaseEvent {
+  step: string;
+  message: string;
+  progress: number;
+}
+
 /**
  * Builds an LLMProvider that calls Lovable AI Gateway with tool-calling
- * to enforce the schema brand-ingestor passes in.
+ * to enforce the schema brand-ingestor passes in. Optionally emits
+ * progress events whenever it is invoked, so callers can surface live
+ * status (e.g. "extracting brand identity") even though the underlying
+ * brand-ingestor library exposes no progress hook.
  */
 export function createLovableLLMProvider(opts: {
   apiKey: string;
   model?: string;
+  onPhase?: (event: PhaseEvent) => void;
 }): LLMProvider {
   const model = opts.model ?? DEFAULT_MODEL;
+  let callIndex = 0;
   return {
     generateObject: async <T>(prompt: string, schema: z.ZodType<T>): Promise<T> => {
+      // Heuristic: infer the current phase from the prompt content so we
+      // can surface meaningful status updates to the UI.
+      callIndex += 1;
+      const lower = prompt.toLowerCase();
+      let inferred: PhaseEvent | null = null;
+      if (/company|legal name|founded|headquarters|industry/.test(lower)) {
+        inferred = { step: "extracting_company", message: "Extracting company info...", progress: 55 };
+      } else if (/brand|logo|color|tone|personality|voice/.test(lower)) {
+        inferred = { step: "extracting_brand", message: "Extracting brand identity...", progress: 70 };
+      } else if (/product|variant|sku|price/.test(lower)) {
+        inferred = { step: "extracting_product", message: "Extracting product details...", progress: 60 };
+      } else {
+        inferred = {
+          step: `llm_call_${callIndex}`,
+          message: `Analyzing page content (call ${callIndex})...`,
+          progress: 50,
+        };
+      }
+      opts.onPhase?.(inferred);
+
       const parameters = zodToJsonSchema(schema);
       const body = {
         model,
@@ -322,7 +353,8 @@ export function mapProfileToScanResult(
 
 /**
  * Run the full brand ingestion pipeline against a URL using the
- * Lovable AI Gateway as the LLM backend.
+ * Lovable AI Gateway as the LLM backend. Emits coarse-grained phase
+ * events via `onPhase` so callers can stream progress to a UI.
  */
 export async function runBrandIngestion(opts: {
   url: string;
@@ -330,12 +362,26 @@ export async function runBrandIngestion(opts: {
   model?: string;
   maxPages?: number;
   concurrency?: number;
+  onPhase?: (event: PhaseEvent) => void;
 }): Promise<ScanResultPayload> {
-  const llmProvider = createLovableLLMProvider({ apiKey: opts.apiKey, model: opts.model });
+  const emit = (e: PhaseEvent) => opts.onPhase?.(e);
+
+  emit({ step: "detecting_platform", message: "Detecting site platform...", progress: 15 });
+
+  const llmProvider = createLovableLLMProvider({
+    apiKey: opts.apiKey,
+    model: opts.model,
+    onPhase: opts.onPhase,
+  });
+
+  emit({ step: "fetching_products", message: "Crawling site and fetching products...", progress: 35 });
+
   const profile = await ingestBrand(opts.url, {
     llmProvider,
     maxPages: opts.maxPages ?? 20,
     concurrency: opts.concurrency ?? 2,
   });
+
+  emit({ step: "mapping", message: "Finalizing brand profile...", progress: 90 });
   return mapProfileToScanResult(profile, opts.url);
 }

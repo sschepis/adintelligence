@@ -331,6 +331,7 @@ export type Database = {
           org_id: string
           primary_color: string | null
           products: Json | null
+          raw_profile: Json | null
           secondary_color: string | null
           sidebar_visibility: Json | null
           taxonomy: Json | null
@@ -355,6 +356,7 @@ export type Database = {
           org_id: string
           primary_color?: string | null
           products?: Json | null
+          raw_profile?: Json | null
           secondary_color?: string | null
           sidebar_visibility?: Json | null
           taxonomy?: Json | null
@@ -379,6 +381,7 @@ export type Database = {
           org_id?: string
           primary_color?: string | null
           products?: Json | null
+          raw_profile?: Json | null
           secondary_color?: string | null
           sidebar_visibility?: Json | null
           taxonomy?: Json | null
