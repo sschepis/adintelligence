@@ -8,12 +8,8 @@ const DEFAULT_MODEL = "google/gemini-2.5-flash";
 /**
  * Converts a Zod schema into a JSON Schema object the Lovable AI Gateway
  * (OpenAI-compatible) accepts as a `function` tool's `parameters`.
- *
- * brand-ingestor uses zod v4. We do a pragmatic recursive walk producing
- * a valid JSON Schema subset that covers everything brand-ingestor uses.
  */
 function zodToJsonSchema(schema: any): any {
-  // Unwrap optional / default / nullable wrappers
   const def = schema?._def ?? schema?.def;
   if (!def) return { type: "object", additionalProperties: true };
 
@@ -80,31 +76,58 @@ export interface PhaseEvent {
 }
 
 /**
- * Builds an LLMProvider that calls Lovable AI Gateway with tool-calling
- * to enforce the schema brand-ingestor passes in. Optionally emits
- * progress events whenever it is invoked, so callers can surface live
- * status (e.g. "extracting brand identity") even though the underlying
- * brand-ingestor library exposes no progress hook.
+ * A partial scan result emitted incrementally as the LLM produces structured
+ * pieces of the brand profile. Subscribers can merge this into UI state to
+ * show colors, products, taxonomy, and brand DNA filling in progressively.
+ */
+export interface PartialScanEvent {
+  branding?: ScanResultPayload["branding"];
+  brandName?: string;
+  taxonomy?: string[];
+  products?: any[];
+  brandDNA?: any;
+  metadata?: Record<string, any>;
+}
+
+interface ProviderHooks {
+  onPhase?: (event: PhaseEvent) => void;
+  onPartial?: (partial: PartialScanEvent, sourceUrl: string) => void;
+  sourceUrl?: string;
+}
+
+/**
+ * Builds an LLMProvider that calls Lovable AI Gateway with tool-calling.
+ * After each call, inspects the result and emits a partial scan payload so
+ * the UI can show data filling in incrementally.
  */
 export function createLovableLLMProvider(opts: {
   apiKey: string;
   model?: string;
-  onPhase?: (event: PhaseEvent) => void;
-}): LLMProvider {
+} & ProviderHooks): LLMProvider {
   const model = opts.model ?? DEFAULT_MODEL;
   let callIndex = 0;
+  // Accumulate fragments across calls so each partial event reflects everything known so far.
+  const accumulated: {
+    company?: any;
+    brand?: any;
+    products: any[];
+    taxonomyHints: Set<string>;
+  } = { products: [], taxonomyHints: new Set() };
+
   return {
     generateObject: async <T>(prompt: string, schema: z.ZodType<T>): Promise<T> => {
-      // Heuristic: infer the current phase from the prompt content so we
-      // can surface meaningful status updates to the UI.
       callIndex += 1;
       const lower = prompt.toLowerCase();
-      let inferred: PhaseEvent | null = null;
+      let inferred: PhaseEvent;
+      let kind: "company" | "brand" | "product" | "other" = "other";
       if (/company|legal name|founded|headquarters|industry/.test(lower)) {
+        kind = "company";
         inferred = { step: "extracting_company", message: "Extracting company info...", progress: 55 };
       } else if (/brand|logo|color|tone|personality|voice/.test(lower)) {
+        kind = "brand";
         inferred = { step: "extracting_brand", message: "Extracting brand identity...", progress: 70 };
       } else if (/product|variant|sku|price/.test(lower)) {
+        kind = "product";
         inferred = { step: "extracting_product", message: "Extracting product details...", progress: 60 };
       } else {
         inferred = {
@@ -158,13 +181,45 @@ export function createLovableLLMProvider(opts: {
       const json = await resp.json();
       const toolCall = json?.choices?.[0]?.message?.tool_calls?.[0];
       const argsString = toolCall?.function?.arguments;
+      let parsed: T;
       if (!argsString) {
-        // Fallback: model returned plain content
         const content = json?.choices?.[0]?.message?.content ?? "{}";
-        return schema.parse(safeParseJson(content));
+        parsed = schema.parse(safeParseJson(content));
+      } else {
+        parsed = schema.parse(safeParseJson(argsString));
       }
-      const parsedArgs = safeParseJson(argsString);
-      return schema.parse(parsedArgs);
+
+      // Heuristically merge the extracted result into our running profile.
+      try {
+        const result: any = parsed;
+        if (kind === "company" && result && typeof result === "object") {
+          accumulated.company = { ...(accumulated.company ?? {}), ...result };
+        } else if (kind === "brand" && result && typeof result === "object") {
+          accumulated.brand = { ...(accumulated.brand ?? {}), ...result };
+        } else if (kind === "product" && result && typeof result === "object") {
+          // Products may be returned as a single product or an array
+          const arr = Array.isArray(result) ? result
+            : Array.isArray(result.products) ? result.products
+            : [result];
+          for (const p of arr) {
+            if (p && typeof p === "object" && (p.name || p.title)) {
+              accumulated.products.push(p);
+              if (p.productType) accumulated.taxonomyHints.add(p.productType);
+              if (Array.isArray(p.tags)) p.tags.forEach((t: string) => accumulated.taxonomyHints.add(t));
+            }
+          }
+        }
+
+        if (opts.onPartial && opts.sourceUrl) {
+          const partial = buildPartialScan(accumulated, opts.sourceUrl);
+          opts.onPartial(partial, opts.sourceUrl);
+        }
+      } catch (e) {
+        // Never let progress reporting break the ingestion
+        console.warn("[brand-ingestor] partial emit failed:", e);
+      }
+
+      return parsed;
     },
   };
 }
@@ -173,14 +228,9 @@ function safeParseJson(s: string): any {
   try {
     return JSON.parse(s);
   } catch {
-    // Try to grab the first JSON object substring
     const m = s.match(/\{[\s\S]*\}/);
     if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {
-        /* ignore */
-      }
+      try { return JSON.parse(m[0]); } catch { /* ignore */ }
     }
     return {};
   }
@@ -225,8 +275,106 @@ function isLight(hex: string): boolean {
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
-  // Perceived luminance
   return (0.299 * r + 0.587 * g + 0.114 * b) > 160;
+}
+
+/**
+ * Build a partial scan payload from incrementally accumulated fragments.
+ */
+function buildPartialScan(
+  acc: { company?: any; brand?: any; products: any[]; taxonomyHints: Set<string> },
+  sourceUrl: string,
+): PartialScanEvent {
+  const partial: PartialScanEvent = {};
+  const company = acc.company ?? {};
+  const brand = acc.brand ?? {};
+
+  if (company.name || company.legalName) {
+    partial.brandName = company.name ?? company.legalName;
+  }
+
+  // Colors / logo if any brand info exists yet
+  if (brand && (brand.colors?.length || brand.logos?.length)) {
+    const colorList = (brand.colors ?? []).map((c: any) => c.hex).filter(Boolean);
+    const primary = colorList[0] ?? DEFAULT_COLORS.primary;
+    const secondary = colorList[1] ?? DEFAULT_COLORS.secondary;
+    const accent = colorList[2] ?? DEFAULT_COLORS.accent;
+    const background = colorList[3] ?? DEFAULT_COLORS.background;
+    const text = isLight(background) ? "#0a0a0a" : "#ffffff";
+    const colorScheme: "light" | "dark" = isLight(background) ? "light" : "dark";
+    const logo = brand.logos?.find?.((l: any) => l.context !== "favicon")?.url
+      ?? brand.logos?.[0]?.url
+      ?? null;
+    partial.branding = {
+      logo,
+      colors: { primary, secondary, accent, background, text },
+      colorScheme,
+    };
+  }
+
+  if (acc.taxonomyHints.size > 0) {
+    partial.taxonomy = Array.from(acc.taxonomyHints).slice(0, 30);
+  }
+
+  if (acc.products.length > 0) {
+    partial.products = acc.products.slice(0, 50).map((p) => {
+      const firstVariant = p.variants?.[0];
+      const priceNum = firstVariant?.price ? Number(firstVariant.price) : undefined;
+      const images = (p.images ?? []).map((i: any) => i?.url ?? i).filter(Boolean);
+      return {
+        name: p.name ?? p.title,
+        category: p.productType ?? "Uncategorized",
+        price: Number.isFinite(priceNum as number) ? priceNum : undefined,
+        description: p.description,
+        image: images[0],
+        images,
+        url: p.url,
+      };
+    });
+  }
+
+  // Best-effort partial brand DNA from brand fragment
+  if (brand.brandValues || brand.brandPersonality || brand.voiceTone || brand.taglines) {
+    partial.brandDNA = {
+      voice: {
+        toneSpectrum: { formal: 50, casual: 50, professional: 50, friendly: 50, authoritative: 50, playful: 50 },
+        vocabulary: { preferred: brand.brandValues ?? [], avoided: [] },
+        emotionalSignature: brand.brandPersonality ? [brand.brandPersonality] : [],
+        communicationPatterns: brand.voiceTone ? [brand.voiceTone] : [],
+        sentenceStyle: "medium",
+      },
+      personality: {
+        archetype: null,
+        secondaryArchetype: null,
+        traits: brand.brandValues ?? [],
+        values: brand.brandValues ?? [],
+        emotionalTone: brand.brandPersonality ?? null,
+      },
+      story: {
+        mission: company.description ?? null,
+        vision: null,
+        tagline: company.tagline ?? brand.taglines?.[0] ?? null,
+        origin: company.foundedYear ? `Founded in ${company.foundedYear}` : null,
+        enemyStatement: null,
+        transformationPromise: null,
+      },
+      guardrails: {
+        forbiddenWords: [],
+        avoidTopics: [],
+        toneAvoid: [],
+        visualAvoid: [],
+        competitorMentions: false,
+        enabled: true,
+      },
+    };
+  }
+
+  partial.metadata = {
+    url: sourceUrl,
+    productCount: acc.products.length,
+  };
+
+  return partial;
 }
 
 /**
@@ -242,7 +390,6 @@ export function mapProfileToScanResult(
   const taxonomyData = profile.taxonomy ?? {};
   const products = profile.products ?? [];
 
-  // Pick brand colors
   const colorList = (brand.colors ?? []).map((c) => c.hex).filter(Boolean);
   const primary = colorList[0] ?? DEFAULT_COLORS.primary;
   const secondary = colorList[1] ?? DEFAULT_COLORS.secondary;
@@ -251,19 +398,16 @@ export function mapProfileToScanResult(
   const text = isLight(background) ? "#0a0a0a" : "#ffffff";
   const colorScheme: "light" | "dark" = isLight(background) ? "light" : "dark";
 
-  // Pick a logo
   const logo = brand.logos?.find((l) => l.context !== "favicon")?.url
     ?? brand.logos?.[0]?.url
     ?? null;
 
-  // Taxonomy: collection titles + product types + tags
   const taxonomy = Array.from(new Set([
     ...(taxonomyData.collections ?? []).map((c) => c.title).filter(Boolean),
     ...(taxonomyData.productTypes ?? []),
     ...(taxonomyData.tags ?? []).slice(0, 30),
   ])).slice(0, 30);
 
-  // Map products to legacy shape
   const mappedProducts = products.map((p) => {
     const firstVariant = p.variants?.[0];
     const priceNum = firstVariant?.price ? Number(firstVariant.price) : undefined;
@@ -285,7 +429,6 @@ export function mapProfileToScanResult(
     };
   });
 
-  // Brand DNA mapping (best-effort from brand-ingestor's flat fields)
   const brandDNA = {
     voice: {
       toneSpectrum: { formal: 50, casual: 50, professional: 50, friendly: 50, authoritative: 50, playful: 50 },
@@ -354,7 +497,7 @@ export function mapProfileToScanResult(
 /**
  * Run the full brand ingestion pipeline against a URL using the
  * Lovable AI Gateway as the LLM backend. Emits coarse-grained phase
- * events via `onPhase` so callers can stream progress to a UI.
+ * events via `onPhase` and incremental data updates via `onPartial`.
  */
 export async function runBrandIngestion(opts: {
   url: string;
@@ -363,6 +506,7 @@ export async function runBrandIngestion(opts: {
   maxPages?: number;
   concurrency?: number;
   onPhase?: (event: PhaseEvent) => void;
+  onPartial?: (partial: PartialScanEvent) => void;
 }): Promise<ScanResultPayload> {
   const emit = (e: PhaseEvent) => opts.onPhase?.(e);
 
@@ -372,6 +516,8 @@ export async function runBrandIngestion(opts: {
     apiKey: opts.apiKey,
     model: opts.model,
     onPhase: opts.onPhase,
+    onPartial: opts.onPartial ? (p) => opts.onPartial!(p) : undefined,
+    sourceUrl: opts.url,
   });
 
   emit({ step: "fetching_products", message: "Crawling site and fetching products...", progress: 35 });

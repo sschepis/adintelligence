@@ -19,14 +19,6 @@ interface IngestionState {
   errors: string[];
 }
 
-/**
- * Agentic ingestion endpoint, backed by @sschepis/brand-ingestor.
- *
- * Modes:
- *  - When the client sends `Accept: text/event-stream`, the response is a
- *    streamed SSE feed of progress events ending with a final `result` event.
- *  - Otherwise (legacy / `continue`), it returns a single JSON response.
- */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -43,7 +35,6 @@ serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // No-op continuation
     if (action === "continue" && incomingState?.phase === "complete") {
       return new Response(
         JSON.stringify({
@@ -128,8 +119,8 @@ serve(async (req) => {
 });
 
 /**
- * Streams ingestion progress as SSE. Emits one `phase` event per step,
- * a final `result` event with the full state, and closes.
+ * Streams ingestion progress as SSE. Emits phase events, partial-data
+ * events as fragments are extracted, and a final result event.
  */
 function streamIngestion(url: string, apiKey: string): Response {
   const encoder = new TextEncoder();
@@ -140,7 +131,6 @@ function streamIngestion(url: string, apiKey: string): Response {
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
         );
       };
-      // Heartbeat so intermediaries don't buffer the stream
       const heartbeat = setInterval(() => {
         try { controller.enqueue(encoder.encode(`: ping\n\n`)); } catch { /* ignore */ }
       }, 15_000);
@@ -154,6 +144,7 @@ function streamIngestion(url: string, apiKey: string): Response {
           maxPages: 20,
           concurrency: 2,
           onPhase: (p) => send("phase", p),
+          onPartial: (partial) => send("partial", partial),
         });
 
         const newState: IngestionState = {

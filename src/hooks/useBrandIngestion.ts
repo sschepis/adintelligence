@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { streamEdgeFunction } from "@/lib/sse";
 
 export interface IngestionProduct {
   name: string;
@@ -108,7 +108,7 @@ const createInitialState = (url: string): IngestionState => ({
   errors: []
 });
 
-const FUNCTIONS_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/brand-ingestion-agent`;
+// SSE streaming is now handled via the shared `streamEdgeFunction` helper.
 
 export function useBrandIngestion() {
   const [state, setState] = useState<IngestionState | null>(null);
@@ -174,45 +174,12 @@ export function useBrandIngestion() {
     abortRef.current = controller;
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-      const response = await fetch(FUNCTIONS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          ...(apikey ? { apikey } : {}),
-        },
-        body: JSON.stringify({ action: "start", url: normalizedUrl }),
+      await streamEdgeFunction({
+        functionName: "brand-ingestion-agent",
+        body: { action: "start", url: normalizedUrl },
         signal: controller.signal,
+        onEvent: handleSseEvent,
       });
-
-      if (!response.ok || !response.body) {
-        throw new Error(`Ingestion request failed: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE messages are separated by a blank line
-        let sepIndex: number;
-        while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
-          const rawEvent = buffer.slice(0, sepIndex);
-          buffer = buffer.slice(sepIndex + 2);
-          const parsed = parseSseEvent(rawEvent);
-          if (!parsed) continue;
-          handleSseEvent(parsed);
-        }
-      }
     } catch (error: any) {
       if (error.name === "AbortError") return;
       console.error("[useBrandIngestion] SSE error:", error);
@@ -231,6 +198,25 @@ export function useBrandIngestion() {
           message: evt.data.message,
           step: evt.data.step,
           progress: evt.data.progress,
+        });
+      } else if (evt.event === "partial") {
+        // Merge incremental data into current state so the right-side
+        // preview populates progressively as fragments come in.
+        setState(prev => {
+          const base = prev ?? createInitialState("");
+          const partial = evt.data ?? {};
+          return {
+            ...base,
+            brandName: partial.brandName ?? base.brandName,
+            colors: partial.branding?.colors ?? base.colors,
+            taxonomy: partial.taxonomy?.length ? partial.taxonomy : base.taxonomy,
+            products: partial.products?.length ? partial.products : base.products,
+            brandDNA: partial.brandDNA ? { ...base.brandDNA, ...partial.brandDNA } : base.brandDNA,
+            metadata: { ...base.metadata, ...(partial.metadata ?? {}) },
+            pagesScanned: partial.metadata?.productCount
+              ? Math.max(base.pagesScanned, partial.metadata.productCount + 1)
+              : base.pagesScanned,
+          };
         });
       } else if (evt.event === "result") {
         if (evt.data.state) setState(evt.data.state);
@@ -316,24 +302,4 @@ export function useBrandIngestion() {
     submitReview,
     updateStateField
   };
-}
-
-function parseSseEvent(raw: string): { event: string; data: any } | null {
-  let event = "message";
-  const dataLines: string[] = [];
-  for (const line of raw.split("\n")) {
-    if (line.startsWith(":")) continue; // comment / heartbeat
-    if (line.startsWith("event:")) {
-      event = line.slice(6).trim();
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trim());
-    }
-  }
-  if (dataLines.length === 0) return null;
-  const dataStr = dataLines.join("\n");
-  try {
-    return { event, data: JSON.parse(dataStr) };
-  } catch {
-    return { event, data: dataStr };
-  }
 }
