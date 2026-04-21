@@ -232,6 +232,25 @@ export function useBrandIngestion() {
           step: evt.data.step,
           progress: evt.data.progress,
         });
+      } else if (evt.event === "partial") {
+        // Merge incremental data into current state so the right-side
+        // preview populates progressively as fragments come in.
+        setState(prev => {
+          const base = prev ?? createInitialState("");
+          const partial = evt.data ?? {};
+          return {
+            ...base,
+            brandName: partial.brandName ?? base.brandName,
+            colors: partial.branding?.colors ?? base.colors,
+            taxonomy: partial.taxonomy?.length ? partial.taxonomy : base.taxonomy,
+            products: partial.products?.length ? partial.products : base.products,
+            brandDNA: partial.brandDNA ? { ...base.brandDNA, ...partial.brandDNA } : base.brandDNA,
+            metadata: { ...base.metadata, ...(partial.metadata ?? {}) },
+            pagesScanned: partial.metadata?.productCount
+              ? Math.max(base.pagesScanned, partial.metadata.productCount + 1)
+              : base.pagesScanned,
+          };
+        });
       } else if (evt.event === "result") {
         if (evt.data.state) setState(evt.data.state);
         if (evt.data.rawProfile) setRawProfile(evt.data.rawProfile);
