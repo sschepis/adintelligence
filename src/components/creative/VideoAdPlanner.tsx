@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Film, Sparkles, Loader2, Wand2, Plus, Trash2, Check, Music, Mic, Camera,
-  AlertTriangle, X, CheckCircle2, Circle,
+  X, CheckCircle2, Circle, Lock,
 } from "lucide-react";
 import { useVideoAdJob } from "@/hooks/useVideoAdJob";
 import type {
@@ -20,6 +19,9 @@ import type {
 } from "@/types/videoAd";
 import { toast } from "sonner";
 import { StoryboardPanel } from "./StoryboardPanel";
+import { ManifestTimeline } from "./ManifestTimeline";
+import { ValidationChecklist } from "./ValidationChecklist";
+import { validateManifest, retileManifest, CAMERA_MOTIONS, TRANSITIONS } from "@/lib/manifestValidation";
 
 interface VideoAdPlannerProps {
   brandId?: string;
@@ -37,8 +39,8 @@ const PHASE_LABELS: Record<PlanPhase, string> = {
 
 export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerProps) {
   const {
-    job, planning, loading, validationErrors, isActive,
-    planManifest, startJob, cancelJob,
+    job, planning, loading, isActive,
+    planManifest, startJob, cancelJob, saveStoryboardFrames,
   } = useVideoAdJob();
 
   const [title, setTitle] = useState("");
@@ -50,6 +52,27 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
   const [currentPhase, setCurrentPhase] = useState<PlanPhaseEvent | null>(null);
   const [completedPhases, setCompletedPhases] = useState<Set<PlanPhase>>(new Set());
   const [brandColors, setBrandColors] = useState<string[] | undefined>(undefined);
+  const [activeShotIdx, setActiveShotIdx] = useState<number | null>(null);
+
+  // Live client-side validation (mirrors server)
+  const liveErrors = useMemo(
+    () => (manifest ? validateManifest(manifest, duration, aspect) : []),
+    [manifest, duration, aspect],
+  );
+  const errorIndices = useMemo(() => {
+    const set = new Set<number>();
+    for (const e of liveErrors) {
+      const m = e.path.match(/^shots\[(\d+)\]/);
+      if (m) set.add(Number(m[1]));
+    }
+    return set;
+  }, [liveErrors]);
+
+  // Persist frame map to job whenever it changes
+  const persistFrames = (frames: Record<string, string>) => {
+    if (job?.id) saveStoryboardFrames(job.id, frames);
+  };
+
 
   const handlePlan = async () => {
     if (!brief.trim()) {
