@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Film, Sparkles, Loader2, Wand2, Plus, Trash2, Check, Music, Mic, Camera,
-  AlertTriangle, X, CheckCircle2, Circle,
+  X, CheckCircle2, Circle, Lock,
 } from "lucide-react";
 import { useVideoAdJob } from "@/hooks/useVideoAdJob";
 import type {
@@ -20,6 +19,9 @@ import type {
 } from "@/types/videoAd";
 import { toast } from "sonner";
 import { StoryboardPanel } from "./StoryboardPanel";
+import { ManifestTimeline } from "./ManifestTimeline";
+import { ValidationChecklist } from "./ValidationChecklist";
+import { validateManifest, retileManifest, CAMERA_MOTIONS, TRANSITIONS } from "@/lib/manifestValidation";
 
 interface VideoAdPlannerProps {
   brandId?: string;
@@ -37,8 +39,8 @@ const PHASE_LABELS: Record<PlanPhase, string> = {
 
 export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerProps) {
   const {
-    job, planning, loading, validationErrors, isActive,
-    planManifest, startJob, cancelJob,
+    job, planning, loading, isActive,
+    planManifest, startJob, cancelJob, saveStoryboardFrames,
   } = useVideoAdJob();
 
   const [title, setTitle] = useState("");
@@ -50,6 +52,27 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
   const [currentPhase, setCurrentPhase] = useState<PlanPhaseEvent | null>(null);
   const [completedPhases, setCompletedPhases] = useState<Set<PlanPhase>>(new Set());
   const [brandColors, setBrandColors] = useState<string[] | undefined>(undefined);
+  const [activeShotIdx, setActiveShotIdx] = useState<number | null>(null);
+
+  // Live client-side validation (mirrors server)
+  const liveErrors = useMemo(
+    () => (manifest ? validateManifest(manifest, duration, aspect) : []),
+    [manifest, duration, aspect],
+  );
+  const errorIndices = useMemo(() => {
+    const set = new Set<number>();
+    for (const e of liveErrors) {
+      const m = e.path.match(/^shots\[(\d+)\]/);
+      if (m) set.add(Number(m[1]));
+    }
+    return set;
+  }, [liveErrors]);
+
+  // Persist frame map to job whenever it changes
+  const persistFrames = (frames: Record<string, string>) => {
+    if (job?.id) saveStoryboardFrames(job.id, frames);
+  };
+
 
   const handlePlan = async () => {
     if (!brief.trim()) {
@@ -235,24 +258,14 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
         </CardContent>
       </Card>
 
-      {/* Validation errors */}
+      {/* Validation checklist (live) */}
       <AnimatePresence>
-        {validationErrors.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Manifest validation failed</AlertTitle>
-              <AlertDescription>
-                <ul className="mt-2 space-y-1 text-xs">
-                  {validationErrors.map((e, i) => (
-                    <li key={i}>
-                      <span className="font-mono opacity-70">{e.path || "manifest"}:</span> {e.message}
-                    </li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          </motion.div>
+        {manifest && (
+          <ValidationChecklist
+            errors={liveErrors}
+            onAutoFix={() => manifest && setManifest(retileManifest(manifest))}
+            autoFixLabel="Auto-fix tiling"
+          />
         )}
       </AnimatePresence>
 
@@ -280,6 +293,14 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
                   </div>
                 </div>
 
+                {/* Visual timeline scrubber */}
+                <ManifestTimeline
+                  manifest={manifest}
+                  errorIndices={errorIndices}
+                  activeIndex={activeShotIdx}
+                  onShotClick={(i) => setActiveShotIdx(i)}
+                />
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 rounded-lg bg-muted/40 space-y-1">
                     <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -301,80 +322,109 @@ export function VideoAdPlanner({ brandId, defaultBrief = "" }: VideoAdPlannerPro
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h5 className="font-medium flex items-center gap-2">
-                      <Camera className="h-4 w-4" /> Shot Timeline ({manifest.shots.length})
+                      <Camera className="h-4 w-4" /> Shot Editor ({manifest.shots.length})
                     </h5>
-                    <Button size="sm" variant="ghost" onClick={addShot} className="gap-1">
+                    <Button
+                      size="sm" variant="ghost"
+                      onClick={addShot}
+                      disabled={manifest.shots.length >= 12}
+                      className="gap-1"
+                    >
                       <Plus className="h-3 w-3" /> Add shot
                     </Button>
                   </div>
 
                   <AnimatePresence initial={false}>
-                    {manifest.shots.map((shot, idx) => (
-                      <motion.div
-                        key={idx}
-                        layout
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 12 }}
-                        className="p-3 rounded-lg border border-border bg-card space-y-2"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Badge variant="soft" className="shrink-0">#{idx + 1}</Badge>
-                          <Input
-                            type="number" className="w-20 h-8" value={shot.durationSeconds}
-                            onChange={(e) => updateShot(idx, { durationSeconds: parseFloat(e.target.value || "0") })}
+                    {manifest.shots.map((shot, idx) => {
+                      const shotHasError = errorIndices.has(idx);
+                      const isActive = activeShotIdx === idx;
+                      return (
+                        <motion.div
+                          key={idx}
+                          layout
+                          initial={{ opacity: 0, x: -12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 12 }}
+                          onClick={() => setActiveShotIdx(idx)}
+                          className={`p-3 rounded-lg border bg-card space-y-2 cursor-pointer transition-colors ${
+                            shotHasError ? "border-destructive" : isActive ? "border-primary" : "border-border"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant={shotHasError ? "destructive" : "soft"} className="shrink-0">#{idx + 1}</Badge>
+                            <span className="text-[10px] text-muted-foreground">@{shot.startSeconds.toFixed(1)}s</span>
+                            <Input
+                              type="number" step="0.5" min={1} className="w-20 h-8" value={shot.durationSeconds}
+                              onChange={(e) => updateShot(idx, { durationSeconds: parseFloat(e.target.value || "0") })}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span className="text-xs text-muted-foreground">sec</span>
+                            <Select value={shot.cameraMotion} onValueChange={(v) => updateShot(idx, { cameraMotion: v as any })}>
+                              <SelectTrigger className="h-8 flex-1 min-w-[120px]" onClick={(e) => e.stopPropagation()}><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {CAMERA_MOTIONS.map((m) => (
+                                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={shot.transition} onValueChange={(v) => updateShot(idx, { transition: v as any })}>
+                              <SelectTrigger className="h-8 w-28" onClick={(e) => e.stopPropagation()}><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {TRANSITIONS.map((t) => (
+                                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="icon" variant="ghost" className="h-8 w-8 shrink-0"
+                              onClick={(e) => { e.stopPropagation(); removeShot(idx); }}
+                              disabled={manifest.shots.length <= 3}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            rows={2} value={shot.visualPrompt}
+                            onChange={(e) => updateShot(idx, { visualPrompt: e.target.value })}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs"
                           />
-                          <span className="text-xs text-muted-foreground">sec</span>
-                          <Select value={shot.cameraMotion} onValueChange={(v) => updateShot(idx, { cameraMotion: v as any })}>
-                            <SelectTrigger className="h-8 flex-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {["static","pan-left","pan-right","zoom-in","zoom-out","dolly","tilt"].map((m) => (
-                                <SelectItem key={m} value={m}>{m}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Select value={shot.transition} onValueChange={(v) => updateShot(idx, { transition: v as any })}>
-                            <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {["cut","fade","dissolve","wipe","slide"].map((t) => (
-                                <SelectItem key={t} value={t}>{t}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => removeShot(idx)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        <Textarea
-                          rows={2} value={shot.visualPrompt}
-                          onChange={(e) => updateShot(idx, { visualPrompt: e.target.value })}
-                          className="text-xs"
-                        />
-                        {shot.voiceoverLine && (
-                          <div className="text-xs text-muted-foreground italic">🎙 "{shot.voiceoverLine}"</div>
-                        )}
-                        {shot.onScreenText && (
-                          <Badge variant="outline" className="text-[10px]">Text: {shot.onScreenText}</Badge>
-                        )}
-                      </motion.div>
-                    ))}
+                          {shot.voiceoverLine && (
+                            <div className="text-xs text-muted-foreground italic">🎙 "{shot.voiceoverLine}"</div>
+                          )}
+                          {shot.onScreenText && (
+                            <Badge variant="outline" className="text-[10px]">Text: {shot.onScreenText}</Badge>
+                          )}
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
 
                 <Button
                   onClick={handleApprove}
-                  disabled={loading || isActive}
+                  disabled={loading || isActive || liveErrors.length > 0}
                   className="w-full gap-2"
                   variant="gradient"
                 >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Approve & Queue Render
+                  {liveErrors.length > 0 ? (
+                    <><Lock className="h-4 w-4" /> Resolve {liveErrors.length} issue{liveErrors.length === 1 ? "" : "s"} to render</>
+                  ) : loading ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Queueing…</>
+                  ) : (
+                    <><Check className="h-4 w-4" /> Approve & Queue Render</>
+                  )}
                 </Button>
               </CardContent>
             </Card>
 
-            {/* Storyboard preview */}
-            <StoryboardPanel manifest={manifest} brandColors={brandColors} />
+            {/* Storyboard preview (persists thumbnails to job once queued) */}
+            <StoryboardPanel
+              manifest={manifest}
+              brandColors={brandColors}
+              initialFrames={job?.storyboard_frames ?? null}
+              onFramesChange={persistFrames}
+            />
           </motion.div>
         )}
       </AnimatePresence>

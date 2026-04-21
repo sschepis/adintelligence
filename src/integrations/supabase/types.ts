@@ -1076,6 +1076,7 @@ export type Database = {
           provider: string | null
           provider_job_id: string | null
           status: string
+          storyboard_frames: Json
           thumbnail_url: string | null
           title: string
           updated_at: string
@@ -1096,6 +1097,7 @@ export type Database = {
           provider?: string | null
           provider_job_id?: string | null
           status?: string
+          storyboard_frames?: Json
           thumbnail_url?: string | null
           title: string
           updated_at?: string
@@ -1116,6 +1118,7 @@ export type Database = {
           provider?: string | null
           provider_job_id?: string | null
           status?: string
+          storyboard_frames?: Json
           thumbnail_url?: string | null
           title?: string
           updated_at?: string

@@ -47,6 +47,7 @@ export interface VideoAdJob {
   provider: string | null;
   provider_job_id: string | null;
   metadata: Record<string, unknown> | null;
+  storyboard_frames?: Record<string, string> | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
