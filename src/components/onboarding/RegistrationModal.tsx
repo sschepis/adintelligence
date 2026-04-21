@@ -60,17 +60,9 @@ export function RegistrationModal({
   const [step, setStep] = useState<'dna' | 'register'>(scanResult.brandDNA ? 'dna' : 'register');
   const [editedDNA, setEditedDNA] = useState<BrandDNA | undefined>(scanResult.brandDNA);
 
-  const expectedDomain = extractDomainFromUrl(websiteUrl);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    // Email domain validation disabled for testing
-    // if (!emailMatchesDomain(email, websiteUrl)) {
-    //   setError(`Please use an email address from @${expectedDomain}`);
-    //   return;
-    // }
 
     // Validate password
     if (password.length < 6) {
