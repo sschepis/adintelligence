@@ -126,6 +126,8 @@ export const StoryboardPanel = forwardRef<StoryboardPanelHandle, StoryboardPanel
     }
   };
 
+  useImperativeHandle(ref, () => ({ regenerate: (idx: number) => generateFrame(idx) }), [manifest, brandColors]);
+
   const generateAll = async () => {
     for (let i = 0; i < manifest.shots.length; i++) {
       if (!frames[i]) await generateFrame(i);
