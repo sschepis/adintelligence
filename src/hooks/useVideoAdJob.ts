@@ -131,6 +131,22 @@ export function useVideoAdJob(initialJobId?: string) {
     [user],
   );
 
+  const saveStoryboardFrames = useCallback(
+    async (jobId: string, frames: Record<string, string>) => {
+      const { error } = await supabase
+        .from("video_ad_jobs")
+        .update({ storyboard_frames: frames as any })
+        .eq("id", jobId);
+      if (error) {
+        console.warn("Failed to persist storyboard frames", error);
+        return false;
+      }
+      setJob((prev) => (prev && prev.id === jobId ? { ...prev, storyboard_frames: frames } : prev));
+      return true;
+    },
+    [],
+  );
+
   const cancelJob = useCallback(async () => {
     if (!job?.id) return;
     if (!["queued", "rendering", "planning"].includes(job.status)) {
