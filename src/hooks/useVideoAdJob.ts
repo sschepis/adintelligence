@@ -218,5 +218,6 @@ export function useVideoAdJob(initialJobId?: string) {
     cancelJob,
     loadJob,
     setJob,
+    saveStoryboardFrames,
   };
 }
