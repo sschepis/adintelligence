@@ -1,0 +1,9 @@
+{
+  "name": "@concentrik/commerce-demand-ai",
+  "version": "0.1.0",
+  "description": "Revenue forecasting, dynamic pricing, demand planning, manufacturing briefs.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "dependencies": { "@concentrik/gateway-client": "workspace:*" }
+}

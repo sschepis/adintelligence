@@ -1,0 +1,9 @@
+{
+  "name": "@concentrik/signals-trend-intel",
+  "version": "0.1.0",
+  "description": "Trend analysis, lifecycle prediction, competitor analysis, market gap detection.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "dependencies": { "@concentrik/gateway-client": "workspace:*" }
+}
