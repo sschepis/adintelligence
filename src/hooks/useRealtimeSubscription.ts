@@ -22,8 +22,7 @@ export function useRealtimeSubscription(configs: RealtimeSubscriptionConfig[]) {
           ? `${config.filterColumn}=eq.${user.id}`
           : undefined;
 
-        return supabase
-          .channel(config.channelName)
+        return (supabase.channel(config.channelName) as any)
           .on(
             "postgres_changes",
             {
@@ -32,8 +31,8 @@ export function useRealtimeSubscription(configs: RealtimeSubscriptionConfig[]) {
               table: config.table,
               ...(filter ? { filter } : {}),
             },
-            (payload) => {
-              config.onPayload(payload as any);
+            (payload: any) => {
+              config.onPayload(payload);
             }
           )
           .subscribe();
