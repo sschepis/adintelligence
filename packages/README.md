@@ -1,13 +1,13 @@
-# @concentrik — Package Index
+# @instinctsai — Package Index
 
 Modular AI packages for trend-driven commerce. All packages share conventions defined in [SHARED_DESIGN.md](./SHARED_DESIGN.md) (models, tool-calls, streaming, errors).
 
 ## Foundation
 
-### [@concentrik/shared](./shared/) — common schemas, errors, constants
+### [@instinctsai/shared](./shared/) — common schemas, errors, constants
 Zod schemas (BrandProfile, StreamEvent, ToolDefinition), error classes (`GatewayError`, `ValidationError`, `RateLimitError`, `CreditsExhaustedError`), model name constants (`MODELS.*`), and `extractJSON`/`safeParse` utilities.
 
-### [@concentrik/gateway-client](./gateway-client/DESIGN.md) — Lovable AI Gateway client
+### [@instinctsai/gateway-client](./gateway-client/DESIGN.md) — Lovable AI Gateway client
 Single client used by every other package. Handles auth, retries, streaming SSE, JSON-mode parsing, and the tool-call loop.
 
 ```ts
@@ -21,7 +21,7 @@ for await (const ev of gateway.stream({ messages })) { /* token | stage | done *
 
 ## Brand & Signals
 
-### [@concentrik/brand-dna-engine](./brand-dna-engine/DESIGN.md) — brand voice, personality, story, scoring
+### [@instinctsai/brand-dna-engine](./brand-dna-engine/DESIGN.md) — brand voice, personality, story, scoring
 Crawls a website and extracts structured brand DNA; scores arbitrary content for consistency; detects drift.
 
 ```ts
@@ -32,7 +32,7 @@ const score = await engine.scoreConsistency("Buy now…", profile);   // overall
 const drift = await engine.detectDrift(recent, baseline);            // none|minor|moderate|significant
 ```
 
-### [@concentrik/signals-trend-intel](./signals-trend-intel/DESIGN.md) — trends, lifecycle, competitors, gaps
+### [@instinctsai/signals-trend-intel](./signals-trend-intel/DESIGN.md) — trends, lifecycle, competitors, gaps
 Turns raw social/search signals into trend analyses, lifecycle predictions, competitor reports, market gaps, and share-of-voice.
 
 ```ts
@@ -47,7 +47,7 @@ const sov = await intel.shareOfVoice("acme", ["nike", "adidas"]);
 
 ## Commerce
 
-### [@concentrik/commerce-demand-ai](./commerce-demand-ai/DESIGN.md) — forecasts, pricing, planning, manufacturing
+### [@instinctsai/commerce-demand-ai](./commerce-demand-ai/DESIGN.md) — forecasts, pricing, planning, manufacturing
 Hybrid statistical+LLM forecasting, dynamic pricing recommendations, per-SKU demand plans, and tech-pack-ready manufacturing briefs.
 
 ```ts
@@ -61,7 +61,7 @@ const brief = await demand.generateManufacturingBrief({ trendName, brandDNA, tar
 
 ## Creative
 
-### [@concentrik/creative-video-planner](./creative-video-planner/DESIGN.md) — Shotstack-compatible video manifests
+### [@instinctsai/creative-video-planner](./creative-video-planner/DESIGN.md) — Shotstack-compatible video manifests
 Generates strict `ProductionManifest` from a brief + brand DNA, validates, analyzes timing (gaps/overlaps), retiles individual shots, exports to Shotstack JSON.
 
 ```ts
@@ -72,7 +72,7 @@ const fixed = planner.retileShot(manifest, 2);     // snap shot 2 to predecessor
 const ssJson = planner.toShotstack(manifest);
 ```
 
-### [@concentrik/creative-copy-forge](./creative-copy-forge/DESIGN.md) — brand-aware text generation
+### [@instinctsai/creative-copy-forge](./creative-copy-forge/DESIGN.md) — brand-aware text generation
 Single generation, axis-driven variants, targeted rewrites, and A/B-ready ad triplets — all with brand-DNA injection and guardrail post-filter.
 
 ```ts
@@ -82,7 +82,7 @@ const rewritten = await copy.rewrite(text, "make it punchier", brandDNA);
 const ads = await copy.smartABVariants({ headline, body, cta }, 4);
 ```
 
-### [@concentrik/creative-visual-forge](./creative-visual-forge/DESIGN.md) — image gen + vision analysis
+### [@instinctsai/creative-visual-forge](./creative-visual-forge/DESIGN.md) — image gen + vision analysis
 Brand-consistent image generation, storyboard frames with style anchor, retry-only-failed-frames, and vision-based product image analysis.
 
 ```ts
@@ -96,7 +96,7 @@ const analysis = await visual.analyzeProductImage(url, trendColors); // colors, 
 
 ## Conversation & Optimization
 
-### [@concentrik/assistant-conversational](./assistant-conversational/DESIGN.md) — chat, analytics Q&A, voice-to-brief
+### [@instinctsai/assistant-conversational](./assistant-conversational/DESIGN.md) — chat, analytics Q&A, voice-to-brief
 Glass-box assistant with reasoning + tool-calls visible, NL-to-data analytics with explicit assumptions, and voice → structured creative brief.
 
 ```ts
@@ -105,7 +105,7 @@ const answer = await assistant.ask("compare CTR by platform last 30d", { schema,
 const brief = await assistant.transcribeVoiceToBrief(audioBlob);
 ```
 
-### [@concentrik/campaigns-optimizer](./campaigns-optimizer/DESIGN.md) — morphs, simulation, timing, reports
+### [@instinctsai/campaigns-optimizer](./campaigns-optimizer/DESIGN.md) — morphs, simulation, timing, reports
 Suggests live campaign morphs ranked by expected lift, simulates persona reactions before launch, recommends posting times, and produces performance reports + competitor digests.
 
 ```ts
