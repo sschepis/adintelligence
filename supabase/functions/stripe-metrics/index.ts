@@ -48,7 +48,24 @@ serve(async (req) => {
     logStep("Admin access verified");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
+    if (!stripeKey) {
+      logStep("STRIPE_SECRET_KEY not configured, returning empty metrics");
+      return new Response(JSON.stringify({
+        totalRevenue: 0,
+        monthlyRevenue: 0,
+        revenueGrowth: 0,
+        mrr: 0,
+        activeSubscriptions: 0,
+        totalCustomers: 0,
+        revenueByMonth: [],
+        subscriptionTiers: [],
+        balance: { available: 0, pending: 0 },
+        billing_configured: false,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 

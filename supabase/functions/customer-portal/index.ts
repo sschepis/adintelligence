@@ -21,7 +21,12 @@ serve(async (req) => {
     logStep("Function started");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
+    if (!stripeKey) {
+      return new Response(
+        JSON.stringify({ error: "Billing is not configured yet.", billing_configured: false }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
     logStep("Stripe key verified");
 
     const supabaseClient = createClient(
