@@ -42,6 +42,7 @@ import CompetitiveIntelligence from "./pages/CompetitiveIntelligence";
 import ApiDocs from "./pages/ApiDocs";
 import Documentation from "./pages/Documentation";
 import NotFound from "./pages/NotFound";
+import BrandSetup from "./pages/BrandSetup";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ function AnimatedRoutes() {
         <Route path="/update-password" element={<PageTransition><UpdatePassword /></PageTransition>} />
         <Route path="/verify-email" element={<ProtectedRoute><PageTransition><VerifyEmail /></PageTransition></ProtectedRoute>} />
         <Route path="/subscription" element={<ProtectedRoute><PageTransition><Subscription /></PageTransition></ProtectedRoute>} />
+        <Route path="/onboarding" element={<ProtectedRoute><BrandSetup /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><PageTransition><Index /></PageTransition></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><PageTransition><Profile /></PageTransition></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><PageTransition><Settings /></PageTransition></ProtectedRoute>} />
