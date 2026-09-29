@@ -121,19 +121,9 @@ export default function Auth() {
     setIsSubmitting(true);
 
     try {
-      // Check if domain already exists in system
-      const domainExists = await checkDomainInSystem(emailDomain);
-      
-      if (domainExists) {
-        // Domain exists, just create the account
-        await createAccount();
-      } else {
-        // Domain doesn't exist, need to scan website first
-        setNeedsWebsite(true);
-        setWebsiteUrl(emailDomain);
-      }
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to verify domain.", variant: "destructive" });
+      await createAccount();
+    } catch {
+      // handled in createAccount
     } finally {
       setIsSubmitting(false);
     }

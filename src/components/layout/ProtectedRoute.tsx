@@ -12,7 +12,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
-  const { needsSubscription, loading: orgLoading } = useOrganization();
+  const { organization, needsSubscription, loading: orgLoading } = useOrganization();
   const navigate = useNavigate();
   const location = useLocation();
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
@@ -26,6 +26,15 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       navigate("/");
     }
   }, [user, authLoading, navigate]);
+
+  // Send users without a brand workspace to the post-login brand scan
+  useEffect(() => {
+    if (authLoading || orgLoading || !user || organization) return;
+    const exempt = ['/onboarding', '/verify-email', '/subscription'];
+    if (exempt.includes(location.pathname)) return;
+    if (localStorage.getItem('skip_brand_setup')) return;
+    navigate('/onboarding');
+  }, [authLoading, orgLoading, user, organization, location.pathname, navigate]);
 
   // Check email verification status
   useEffect(() => {

@@ -80,24 +80,27 @@ function InputStep({
         <p className="text-muted-foreground mb-6">
           Enter your brand's website and we'll set everything up for you
         </p>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Input
             type="url"
-            placeholder="yourbrand.com"
+            placeholder="yourbrand.com (optional)"
             value={brandUrl}
             onChange={(e) => setBrandUrl(e.target.value)}
             className="flex-1 h-12 bg-background/60 border-border/50 text-lg"
-            onKeyDown={(e) => e.key === 'Enter' && onScan()}
+            onKeyDown={(e) => e.key === 'Enter' && brandUrl.trim() && onScan()}
           />
-          <Button 
-            size="lg" 
-            onClick={onScan}
+          <Button
+            size="lg"
+            onClick={() => (brandUrl.trim() ? onScan() : (window.location.href = '/auth'))}
             className="h-12 px-6 bg-gradient-to-r from-primary to-accent hover:opacity-90"
           >
-            <span className="mr-2">Scan</span>
+            <span className="mr-2">{brandUrl.trim() ? 'Scan' : 'Sign Up'}</span>
             <ArrowRight className="w-4 h-4" />
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          No website handy? Sign up now and scan your brand after you log in.
+        </p>
       </div>
     </motion.div>
   );
