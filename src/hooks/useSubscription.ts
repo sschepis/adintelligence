@@ -70,6 +70,7 @@ export function useSubscription() {
       const { data, error } = await supabase.functions.invoke('customer-portal');
       
       if (error) throw error;
+      if (data?.billing_configured === false) throw new Error(data.error || 'Billing is not configured yet.');
       if (!data?.url) throw new Error('No portal URL returned');
       
       window.open(data.url, '_blank');
