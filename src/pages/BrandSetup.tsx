@@ -33,14 +33,16 @@ export default function BrandSetup() {
     try {
       let result: any = null;
       try {
-        await streamEdgeFunction("scan-website", { url: target }, {
-          onEvent: (event: string, data: any) => {
+        await streamEdgeFunction({
+          functionName: "scan-website",
+          body: { url: target },
+          onEvent: ({ event, data }) => {
             if (event === "phase") {
               if (typeof data?.progress === "number") setProgress(data.progress);
               if (data?.message) setMessage(data.message);
             } else if (event === "result") result = data;
           },
-        } as any);
+        });
       } catch (err) {
         console.warn("Streaming scan failed, falling back:", err);
       }
